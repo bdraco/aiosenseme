@@ -21,7 +21,7 @@ if sys.version_info < (3, 6):
 
 setup(
     name="aiosenseme",
-    version="0.1.0",
+    version="0.1.1",
     description="SenseME by Big Ass Fans asynchronous Python library",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -30,7 +30,7 @@ setup(
     url="https://github.com/mikelawrence/aiosenseme",
     packages=["aiosenseme"],
     license="GPL3",
-    install_requires=["ifaddr>=0.1.6",],
+    install_requires=["ifaddr>=0.1.6"],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

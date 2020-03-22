@@ -1,1 +1,2 @@
 v0.1.0, 03-20-2020 -- Initial release.
+v0.1.1, 03-21-2020 -- Add L-Series Haiku fan to known model list.

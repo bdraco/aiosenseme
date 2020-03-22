@@ -321,4 +321,5 @@ async def Discover_Any(timeoutSeconds=5) -> bool:
     await asyncio.sleep(timeoutSeconds)
     count = len(discovery.devices)
     discovery.stop()
+    _LOGGER.debug("Discovered %s fan%s" % (count, "" if count == 1 else "s"))
     return count > 0

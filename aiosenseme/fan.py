@@ -280,7 +280,7 @@ class SensemeFan:
 
     @property
     def connected(self) -> bool:
-        """Return True when fna is connected."""
+        """Return True when fan is connected."""
         return self._is_connected
 
     @property
@@ -291,6 +291,8 @@ class SensemeFan:
                 return "Haiku Fan with Light"
             else:
                 return "Haiku Fan"
+        elif "FAN" in self._model.upper() and "LSERIES" in self._model.upper():
+            return "Haiku L Fan"
         else:
             return self._model
 
