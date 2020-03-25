@@ -20,6 +20,7 @@ import logging
 import random
 import time
 import traceback
+from typing import Any, Callable, List, Tuple
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,35 +60,10 @@ ROOM_TYPES = [
     "Mudroom",
 ]
 
-
-class SensemeProtocol(asyncio.Protocol):
-    """Protocol for SenseME communication."""
-
-    def __init__(self, name, endpoint):
-        self._name = name
-        self._endpoint = endpoint
-
-    # Protocol methods
-    def connection_made(self, transport):
-        _LOGGER.debug("%s: Connected" % self._name)
-        self._endpoint._transport = transport
-        self._opened = True
-
-    def connection_lost(self, exe):
-        _LOGGER.debug("%s: Connection lost" % self._name)
-        self._endpoint.close()  # half-closed connections are not permitted
-
-    # Streaming Protocol methods
-    def data_received(self, data):
-        if data:
-            msg = data.decode("utf-8")
-            try:
-                self._endpoint.receive_queue.put_nowait(msg)
-            except asyncio.QueueFull:
-                _LOGGER.error("%s: Receive queue full" % self._name)
-
-    def eof_received(self):
-        return False  # tell the transport to close itself
+FAN_MODEL_TYPES = {
+    "FAN,HAIKU,SENSEME": "Haiku Fan",
+    "FAN,LSERIES": "Haiku L Fan",
+}
 
 
 class SensemeEndpoint:
@@ -111,7 +87,7 @@ class SensemeEndpoint:
         if self._transport:
             self._transport.close()
 
-    def is_closing(self):
+    def is_closing(self) -> bool:
         """Return True if the endpoint is closed or closing."""
         if not self._opened:
             return False  # unopened connection is not closed
@@ -119,7 +95,7 @@ class SensemeEndpoint:
             return True  # opened connection but no transport is closed
         return self._transport.is_closing()
 
-    async def receive(self):
+    async def receive(self) -> str:
         """Wait for a message from the SenseME fan.
         Return None when the socket is closed.
         This method is a coroutine.
@@ -133,16 +109,48 @@ class SensemeEndpoint:
         self._transport.write(cmd.encode("utf-8"))
 
 
+class SensemeProtocol(asyncio.Protocol):
+    """Protocol for SenseME communication."""
+
+    def __init__(self, name, endpoint: SensemeEndpoint):
+        self._name = name
+        self._endpoint = endpoint
+
+    # Protocol methods
+    def connection_made(self, transport: asyncio.Protocol):
+        _LOGGER.debug("%s: Connected" % self._name)
+        self._endpoint._transport = transport
+        self._opened = True
+
+    def connection_lost(self, exe: Exception):
+        _LOGGER.debug("%s: Connection lost" % self._name)
+        self._endpoint.close()  # half-closed connections are not permitted
+
+    # Streaming Protocol methods
+    def data_received(self, data: str) -> str:
+        if data:
+            msg = data.decode("utf-8")
+            try:
+                self._endpoint.receive_queue.put_nowait(msg)
+            except asyncio.QueueFull:
+                _LOGGER.error("%s: Receive queue full" % self._name)
+
+    def eof_received(self) -> bool:
+        return False  # tell the transport to close itself
+
+
 class SensemeFan:
     """SensemeFan Class."""
 
-    def __init__(self, name, id, ip, model, refreshMinutes=1):
+    def __init__(
+        self, name: str, id: str, ip: str, model: str, refreshMinutes: int = 1
+    ):
         self._name = name
         self.refreshMinutes = refreshMinutes
         self._id = id
         self._ip = ip
         self._model = model
-        self._group_name = None
+        self._room_name = None
         self._fw_name = ""
         self._fw_version = None
         self._has_light = None
@@ -157,23 +165,24 @@ class SensemeFan:
         self._callbacks = []
         self._first_update = False
 
-    def __eq__(self, other):
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, str):
+            return other == self._name or other == self._room_name
         if not isinstance(other, SensemeFan):
             return NotImplemented
-
         # same if they have the same id (MAC address)
         return self._id == other.id
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self._id)
 
-    def __str__(self):
+    def __str__(self) -> str:
         string = f"Name: {self._name}"
+        if self._room_name is not None:
+            string += f", Room Name: {self._room_name}"
         string += f", ID: {self._id}"
         string += f", IP: {self._ip}"
         string += f", Model: {self.model}"
-        if self._group_name is not None:
-            string += f", Group Name: {self._group_name}"
         if self._fw_version is not None:
             string += f", FW Version: {self._fw_version}"
         if self._has_light is not None:
@@ -187,18 +196,20 @@ class SensemeFan:
             return False
         if self._has_light is None:
             return False
-        if self._group_name is None:
+        if self._room_name is None:
             return False
         return True
 
     async def fill_out_sec_info(self) -> bool:
-        """Retrieves secondary info (fw_version, has_light and group_name) from the
-        SenseME fan directly. The secondary data is also populated when the thread is
+        """Retrieves secondary info (fw_version, has_light and room_name) from the
+        SenseME fan directly. The secondary data is also populated when the fan is
         started and after the fan is connected.
         This method is a coroutine.
         """
 
-        async def _query_fan(reader, writer, cmd) -> str:
+        async def _query_fan(
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter, cmd: str
+        ) -> str:
             """Sends command to SenseME fan and parses response.
 
             None is returned if response was 'ERROR;PARSE'
@@ -250,7 +261,7 @@ class SensemeFan:
             self._has_light = (
                 await _query_fan(reader, writer, "DEVICE;LIGHT")
             ).upper() == "PRESENT"
-            self._group_name = await _query_fan(reader, writer, "GROUP;LIST")
+            self._room_name = await _query_fan(reader, writer, "GROUP;LIST")
             return True
         except Exception:
             _LOGGER.debug(
@@ -274,6 +285,11 @@ class SensemeFan:
         return self._id
 
     @property
+    def mac(self) -> str:
+        """Return MAC address of fan. Also known as id."""
+        return self._id
+
+    @property
     def ip(self) -> str:
         """Return IP address of fan."""
         return self._ip
@@ -286,15 +302,11 @@ class SensemeFan:
     @property
     def model(self) -> str:
         """Return Model of fan."""
-        if "FAN" in self._model.upper() and "HAIKU" in self._model.upper():
-            if self._has_light:
-                return "Haiku Fan with Light"
-            else:
-                return "Haiku Fan"
-        elif "FAN" in self._model.upper() and "LSERIES" in self._model.upper():
-            return "Haiku L Fan"
-        else:
-            return self._model
+        return FAN_MODEL_TYPES.get(self._model.upper(), self._model.upper())
+
+    @classmethod
+    def models(cls):
+        return list(FAN_MODEL_TYPES.values())
 
     @property
     def fw_version(self) -> str:
@@ -316,10 +328,11 @@ class SensemeFan:
             return None
 
     @device_indicators.setter
-    def device_indicators(self, value):
+    def device_indicators(self, value: bool):
         """Enable/disable the device LED indicator."""
-        state = "ON"
-        if not value:
+        if value:
+            state = "ON"
+        else:
             state = "OFF"
         self._send_command(f"DEVICE;INDICATORS;{state}")
 
@@ -333,10 +346,11 @@ class SensemeFan:
             return None
 
     @device_beeper.setter
-    def device_beeper(self, value):
+    def device_beeper(self, value: bool):
         """Enable/disable the device audible alert."""
-        state = "ON"
-        if not value:
+        if value:
+            state = "ON"
+        else:
             state = "OFF"
         self._send_command(f"DEVICE;BEEPER;{state}")
 
@@ -402,31 +416,31 @@ class SensemeFan:
         return self._data.get("NW;TOKEN", None)
 
     @property
-    def group_status(self) -> bool:
-        """Return True if the fan is in a group."""
-        group_name = self._data.get("GROUP;LIST", None)
-        group_type = self._data.get("GROUP;ROOM;TYPE", None)
-        if group_name and group_type:
-            return group_name != "EMPTY" and group_type != "0"
+    def room_status(self) -> bool:
+        """Return True if the fan is in a room."""
+        room_name = self._data.get("GROUP;LIST", None)
+        room_type = self._data.get("GROUP;ROOM;TYPE", None)
+        if room_name and room_type:
+            return room_name != "EMPTY" and room_type != "0"
         else:
             return None
 
     @property
-    def group_name(self) -> str:
-        """Return the group name of the fan.
+    def room_name(self) -> str:
+        """Return the room name of the fan.
 
         'EMPTY' is returned if not in a group.
         """
         return self._data.get("GROUP;LIST", None)
 
     @property
-    def group_room_type(self) -> str:
-        """Return the group room type of the fan."""
-        group_type = int(self._data.get("GROUP;ROOM;TYPE", None))
-        if group_type:
-            if group_type >= len(ROOM_TYPES):
-                group_type = 0
-            return ROOM_TYPES[group_type]
+    def room_type(self) -> str:
+        """Return the room type of the fan."""
+        room_type = int(self._data.get("GROUP;ROOM;TYPE", None))
+        if room_type:
+            if room_type >= len(ROOM_TYPES):
+                room_type = 0
+            return ROOM_TYPES[room_type]
         else:
             return None
 
@@ -440,7 +454,7 @@ class SensemeFan:
             return None
 
     @fan_on.setter
-    def fan_on(self, state):
+    def fan_on(self, state: bool):
         """Set the fan power state."""
         state = "ON" if state else "OFF"
         self._send_command(f"FAN;PWR;{state}")
@@ -455,7 +469,7 @@ class SensemeFan:
             return None
 
     @fan_speed.setter
-    def fan_speed(self, speed):
+    def fan_speed(self, speed: int):
         """Sets the fan speed."""
         if speed < 0:
             speed = 0
@@ -482,7 +496,7 @@ class SensemeFan:
             return None
 
     @property
-    def fan_speed_limits_room(self):
+    def fan_speed_limits_room(self) -> Tuple:
         """Return a tuple of the min/max fan speeds the room is configured to support.
 
         A room can limit the minimum/maximum fan speed while keeping the same number of
@@ -500,7 +514,7 @@ class SensemeFan:
         return min, max
 
     @fan_speed_limits_room.setter
-    def fan_speed_limits_room(self, speeds):
+    def fan_speed_limits_room(self, speeds: Tuple):
         """Set a tuple of the min/max fan speeds the room is configured to support."""
         if speeds[0] >= speeds[1]:
             _LOGGER.error("Min speed cannot exceed max speed")
@@ -582,7 +596,7 @@ class SensemeFan:
             return None
 
     @fan_cooltemp.setter
-    def fan_cooltemp(self, temp):
+    def fan_cooltemp(self, temp: float):
         """Set the auto shutoff temperature for 'COOLING' smart mode in Celsius."""
         # force temperature into range
         if temp < 10:
@@ -602,7 +616,7 @@ class SensemeFan:
             return None
 
     @light_on.setter
-    def light_on(self, state):
+    def light_on(self, state: bool):
         """Set the light power state."""
         value = "ON" if state else "OFF"
         self._send_command(f"LIGHT;PWR;{value}")
@@ -617,7 +631,7 @@ class SensemeFan:
             return None
 
     @light_brightness.setter
-    def light_brightness(self, level):
+    def light_brightness(self, level: int):
         """Sets the light brightness."""
         if level < 0:
             level = 0
@@ -644,7 +658,7 @@ class SensemeFan:
             return None
 
     @property
-    def light_brightness_limits_room(self):
+    def light_brightness_limits_room(self) -> Tuple:
         """Return a tuple of the min and max light brightness for the room.
 
         A room can limit the minimum/maximum light brightness while keeping the same
@@ -663,7 +677,7 @@ class SensemeFan:
         return min, max
 
     @light_brightness_limits_room.setter
-    def light_brightness_limits_room(self, speeds):
+    def light_brightness_limits_room(self, speeds: Tuple):
         """Set a tuple of the min and max light brightness for the room."""
         if speeds[0] >= speeds[1]:
             _LOGGER.error("Min speed cannot exceed max speed")
@@ -692,7 +706,7 @@ class SensemeFan:
             return None
 
     @motion_fan_auto.setter
-    def motion_fan_auto(self, state):
+    def motion_fan_auto(self, state: bool):
         """Set the fan automatic on with motion mode."""
         state = "ON" if state else "OFF"
         self._send_command(f";FAN;AUTO;{state}")
@@ -707,12 +721,12 @@ class SensemeFan:
             return None
 
     @motion_light_auto.setter
-    def motion_light_auto(self, state):
+    def motion_light_auto(self, state: bool):
         """Set the light automatic on with motion mode."""
         state = "ON" if state else "OFF"
         self._send_command(f";LIGHT;AUTO;{state}")
 
-    def add_callback(self, callback):
+    def add_callback(self, callback: Callable):
         """Add callback function/coroutine. Called when parameters are updated."""
         if callback not in self._callbacks:
             self._callbacks.append(callback)
@@ -895,7 +909,7 @@ class SensemeFan:
                                         value = value.upper()
                                         self._has_light = value == "PRESENT"
                                     elif key == "GROUP;LIST":
-                                        self._group_name = value
+                                        self._room_name = value
                                     self._execute_callbacks()
                         except Exception as e:
                             self._errorCount += 1

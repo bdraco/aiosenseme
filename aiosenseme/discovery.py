@@ -27,44 +27,12 @@ _LOGGER = logging.getLogger(__name__)
 PORT = 31415
 
 
-class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
-    """Datagram protocol for SenseME Discovery."""
-
-    def __init__(self, endpoint):
-        self._endpoint = endpoint
-
-    # Protocol methods
-    def connection_made(self, transport):
-        self._endpoint._transport = transport
-        self._endpoint._opened = True
-        # _LOGGER.debug("Listening on %s" % self._endpoint._ip)
-        self._endpoint.send_broadcast()
-
-    def connection_lost(self, exe):
-        # _LOGGER.debug("Listener closed on %s" % self._endpoint._ip)
-        self._endpoint.close()  # half-closed connections are not permitted
-
-    # Datagram protocol methods
-    def datagram_received(self, data, addr):
-        if data:
-            msg = data.decode("utf-8")
-            try:
-                self._endpoint.receive_queue.put_nowait((msg, addr[0]))
-            except asyncio.QueueFull:
-                _LOGGER.error("Receive queue full")
-
-    def error_received(self, exe):
-        _LOGGER.error(
-            "Endpoint error on %s\n%s" % (traceback.format_exc(), self._endpoint._ip)
-        )
-
-
 class SensemeDiscoveryEndpoint:
     """High-level endpoint for SenseME Discovery protocol."""
 
     receive_queue = asyncio.Queue()
 
-    def __init__(self, ip=None):
+    def __init__(self, ip: str = None):
         self._opened = False
         self._transport = None
         self._ip = ip
@@ -90,7 +58,7 @@ class SensemeDiscoveryEndpoint:
         if self._transport:
             self._transport.close()
 
-    def is_closing(self):
+    def is_closing(self) -> bool:
         """Return True if the endpoint is closed or closing."""
         if not self._opened:
             return False  # unopened connection is not closed
@@ -98,7 +66,7 @@ class SensemeDiscoveryEndpoint:
             return True  # opened connection but no transport is closed
         return self._transport.is_closing()
 
-    async def receive(self):
+    async def receive(self) -> SensemeFan:
         """Wait for discovered device and return it.
         Return None when the socket is closed.
         This method is a coroutine.
@@ -120,7 +88,7 @@ class SensemeDiscoveryEndpoint:
                 msg_data = msg.split(";")
                 if len(msg_data) != 5:
                     continue
-                # _LOGGER.debug("Received '%s' from %s on %s" % (msg, addr, self._ip))
+                _LOGGER.debug("Received '%s' from %s on %s" % (msg, addr, self._ip))
                 device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
                 return device
             except Exception as e:
@@ -131,9 +99,48 @@ class SensemeDiscoveryEndpoint:
 
     def send_broadcast(self):
         """Sends the SenseME Discovery broadcast packet."""
-        data = "<ALL;DEVICE;ID;GET>".encode("utf-8")
-        self._transport.sendto(data, ("<broadcast>", PORT))
-        # _LOGGER.debug("Discovery broadcast on %s" % (self._ip))
+        try:
+            if self._opened:
+                data = "<ALL;DEVICE;ID;GET>".encode("utf-8")
+                self._transport.sendto(data, ("<broadcast>", PORT))
+                _LOGGER.debug("Discovery broadcast on %s" % (self._ip))
+        except Exception:
+            _LOGGER.debug(
+                "Ignored broadcast error on %s\n%s" % (self._ip, traceback.format_exc())
+            )
+
+
+class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
+    """Datagram protocol for SenseME Discovery."""
+
+    def __init__(self, endpoint: SensemeDiscoveryEndpoint):
+        self._endpoint = endpoint
+
+    # Protocol methods
+    def connection_made(self, transport: asyncio.Protocol):
+        self._endpoint._transport = transport
+        self._endpoint._opened = True
+        _LOGGER.debug("Listening on %s" % self._endpoint._ip)
+        self._endpoint.send_broadcast()
+
+    def connection_lost(self, exe: Exception):
+        _LOGGER.debug("Listener closed on %s" % self._endpoint._ip)
+        self._endpoint.close()  # half-closed connections are not permitted
+
+    # Datagram protocol methods
+    def datagram_received(self, data: str, addr: str):
+        if data:
+            msg = data.decode("utf-8")
+            try:
+                self._endpoint.receive_queue.put_nowait((msg, addr[0]))
+            except asyncio.QueueFull:
+                _LOGGER.error("Receive queue full")
+
+    def error_received(self, exe):
+        _LOGGER.debug(
+            "Endpoint error on %s\n%s" % (self._endpoint._ip, traceback.format_exc())
+        )
+        self._endpoint.close()
 
 
 class SensemeDiscovery:
@@ -145,7 +152,7 @@ class SensemeDiscovery:
 
     _devices = []  # all SensemeDiscovery objects use the same device list
 
-    def __init__(self, startFirst=True, refreshMinutes=5):
+    def __init__(self, startFirst: bool = True, refreshMinutes: int = 5):
         threading.Thread.__init__(self)
         # will start and update device before announcing discovery
         self.startFirst = startFirst
@@ -199,12 +206,14 @@ class SensemeDiscovery:
                     for ip in adapter.ips:
                         if isinstance(ip.ip, str) and "127.0.0.1" not in ip.ip:
                             endpoint = SensemeDiscoveryEndpoint(ip.ip)
+                            # _LOGGER.debug("Found IP %s" % ip.ip)
                             try:
                                 await loop.create_datagram_endpoint(
                                     lambda: SensemeDiscoveryProtocol(endpoint),
                                     local_addr=(ip.ip, PORT),
                                     family=socket.AF_INET,
                                     allow_broadcast=True,
+                                    reuse_port=True,
                                 )
                                 endpoints.append(endpoint)
                             except Exception:
@@ -221,7 +230,8 @@ class SensemeDiscovery:
                         device = None
                         if time.time() - start < 5:
                             for endpoint in endpoints:
-                                endpoint.send_broadcast()
+                                if not endpoint.is_closing():
+                                    endpoint.send_broadcast()
                         else:
                             for endpoint in endpoints:
                                 endpoint.abort()
@@ -323,3 +333,25 @@ async def Discover_Any(timeoutSeconds=5) -> bool:
     discovery.stop()
     _LOGGER.debug("Discovered %s fan%s" % (count, "" if count == 1 else "s"))
     return count > 0
+
+
+async def Discover(name, timeoutSeconds=5) -> SensemeFan:
+    """Discover a fan with a specific name or room name.
+    None is returned if the fan was not found.
+    This function will take up timeoutSeconds to complete.
+    This method is a coroutine.
+    """
+    start = time.time()
+    discovery = SensemeDiscovery(True, 1)
+    try:
+        discovery.start()
+        while True:
+            await asyncio.sleep(0.1)
+            devices = discovery.devices.copy()
+            for device in devices:
+                if device == name:
+                    return device
+            if time.time() - start > timeoutSeconds:
+                return None
+    finally:
+        discovery.stop()
