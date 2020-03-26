@@ -1,4 +1,4 @@
-# aiosenseme
+# aiosenseme library
 
 [![PyPI version](https://badge.fury.io/py/aiosenseme.svg)](https://badge.fury.io/py/aiosenseme)
 
