@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.2.1
+
+* Requiring Python 3.7 was too restrictive. Back to allowing and testing Python 3.6.
+
 ## v0.2.0
 
 * API breaking changes.

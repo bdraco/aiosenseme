@@ -41,5 +41,4 @@ New State: Fan is on (speed: 3), Light is on (brightness: 16), Whoosh: OFF
 
 ## Requirements
 
-Python 3.7 is required to use this library.
 SenseME devices communicate on UDP port 31415 using broadcast and unicast traffic this port must be available and not blocked by a firewall.

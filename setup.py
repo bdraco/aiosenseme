@@ -7,13 +7,13 @@ from setuptools import find_packages, setup
 
 exec(open("aiosenseme/version.py").read())
 
-if sys.version_info < (3, 7):
+if sys.version_info < (3, 6):
     error = """
-    aiosenseme supports Python 3.7 and above.
+    aiosenseme supports Python 3.6 and above.
 
     Python {py} detected.
 
-    Please install using pip3 on Python 3.7 or above.
+    Please install using pip3 on Python 3.6 or above.
     """.format(
         py=".".join([str(v) for v in sys.version_info[:3]])
     )
@@ -41,9 +41,9 @@ setup(
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Framework :: AsyncIO",
-        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.6",
         "Topic :: Home Automation",
     ],
     keywords="HaikuHome SenseME fan home automation bigassfans",
-    python_requires=">=3.7",
+    python_requires=">=3.6",
 )
