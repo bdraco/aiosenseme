@@ -1,5 +1,13 @@
 # Changelog for aiosenseme library
 
+## v0.3.0
+
+* Lots of linting changes.
+* API breaking changes.
+  * aiosenseme.Discover() is now aiosenseme.discover()
+  * aiosenseme.Discover_Any() is now aiosenseme.discover_any()
+* Aiosenseme.discover() will now match Fan Name, Room Name and IP address
+
 ## v0.2.1
 
 * Requiring Python 3.7 was too restrictive. Back to allowing and testing Python 3.6.

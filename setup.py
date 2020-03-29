@@ -1,10 +1,12 @@
 #!/usr/bin/env python
+"""Setup aiosenseme library."""
 from __future__ import print_function
 
 import sys
 
 from setuptools import find_packages, setup
 
+__version__ = "Unknown"
 exec(open("aiosenseme/version.py").read())
 
 if sys.version_info < (3, 6):

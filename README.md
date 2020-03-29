@@ -29,7 +29,7 @@ Studio Vault Fan
 Here both the fan speed is set and the light is turned on. The room name was used to set the fan so all fans in that room changed to the same state. Keep in mind that changing an individual fan that is a member of a room will do the same thing. Notice also that Whoosh was turned off when the fan speed was set specific value.
 
 ```console
-mike@Desktop-Mike:~$ aiosenseme -n "Studio Fans" --speed 3 --light on
+$ aiosenseme --name "Studio Fans" --speed 3 --light on
 Studio Beam Fan
   Room Name: Studio Fans, Room Type: Family Room
   Model: Haiku Fan with light, FW Version: 2.5.0
@@ -37,6 +37,31 @@ Studio Beam Fan
   Token: 73264cb2-1234-1234-1234-012345678912
 State: Fan is on (speed: 2), Light is off, Whoosh: ON
 New State: Fan is on (speed: 3), Light is on (brightness: 16), Whoosh: OFF
+```
+
+You can also select the fan by IP address.
+
+```console
+$ aiosenseme -n 192.168.1.3 --speed 4
+Studio Vault Fan
+  Room Name: Studio Fans, Room Type: Family Room
+  Model: Haiku Fan with light, FW Version: 2.5.0
+  IP Addr: 192.168.1.3, MAC Addr: FF:FF:FF:FF:FF:FF
+  Token: 73264cb2-1234-1234-1234-012345678912
+State: Fan is off, Light is off, Whoosh: ON
+New State: Fan is on (speed: 4), Light is off, Whoosh: OFF
+```
+
+To just read the fan state type the following.
+
+```console
+$ aiosenseme -n 192.168.1.3
+Studio Vault Fan
+  Room Name: Studio Fans, Room Type: Family Room
+  Model: Haiku Fan with light, FW Version: 2.5.0
+  IP Addr: 192.168.1.3, MAC Addr: FF:FF:FF:FF:FF:FF
+  Token: 73264cb2-1234-1234-1234-012345678912
+State: Fan is off, Light is off, Whoosh: ON
 ```
 
 ## Requirements

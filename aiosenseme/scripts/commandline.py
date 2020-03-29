@@ -5,10 +5,9 @@ import asyncio
 import logging
 from typing import List
 
-from aiosenseme import Discover as Discover
-from aiosenseme import SensemeDiscovery as SensemeDiscovery
-from aiosenseme import SensemeFan as SensemeFan
-from aiosenseme import __version__ as __version__
+import aiosenseme
+from aiosenseme import SensemeDiscovery, SensemeFan
+from aiosenseme import __version__
 
 ARGS = argparse.ArgumentParser(
     description="Discover and control Haiku/SenseME fans by Big Ass Fans."
@@ -37,7 +36,12 @@ ARGS.add_argument(
     help="discover all fans on the network",
 )
 ARGS.add_argument(
-    "-n", "--name", action="store", dest="name", default=None, help="fan or room name",
+    "-n",
+    "--name",
+    action="store",
+    dest="name",
+    default=None,
+    help="fan name, room name or IP address",
 )
 ARGS.add_argument(
     "-p",
@@ -88,11 +92,11 @@ ARGS.add_argument(
 )
 
 # array of discovered devices
-devices = []
+_DEVICES = []
 
 
 def print_fan(fan: SensemeFan):
-    """print information about fan."""
+    """Print information about fan."""
     msg = f"{fan.name}\n"
     if fan.room_status:
         msg += f"  Room Name: {fan.room_name}, Room Type: {fan.room_type}\n"
@@ -118,20 +122,22 @@ def print_fan_state(prefix: str, fan: SensemeFan):
     else:
         msg += ", Light is off"
     if fan.fan_whoosh:
-        msg += ", Whoosh: ON"
+        msg += ", Whoosh: on"
     else:
-        msg += ", Whoosh: OFF"
+        msg += ", Whoosh: off"
     print(msg)
 
 
 async def discovered(fans: List[SensemeFan]):
-    """Called when discovery has detected a SenseME fan.
+    """Discovered fan callback function.
+
+    Called when discovery has detected a SenseME fan.
     Each time a device is discovered all devices discovered are reported.
     """
-    global devices
+    global _DEVICES
     for fan in fans:
-        if fan not in devices:
-            devices.append(fan)
+        if fan not in _DEVICES:
+            _DEVICES.append(fan)
             print_fan(fan)
 
 
@@ -162,52 +168,50 @@ async def process_args():
         if args.name is None:
             print("You must specify a fan name using -n or --name")
             return
-        else:
-            fan = await Discover(args.name, 2)
-            if fan is None:
-                print(f"Fan/Room '{args.name}' not found")
-                return
-            print_fan(fan)
-            print_fan_state("State", fan)
-            try:
-                changed = False
-                if args.whoosh is not None:
-                    print(f"whoosh={args.whoosh}")
-                    if fan.fan_whoosh != (args.whoosh == "on"):
-                        changed = True
-                    fan.fan_whoosh = args.whoosh == "on"
-                if args.speed is not None:
-                    if args.fan is not None:
-                        print(
-                            "When specifying --fanspeed there is no "
-                            "reason to set --fan"
-                        )
-                    if fan.fan_speed != args.speed:
-                        changed = True
-                    fan.fan_speed = args.speed
-                elif args.fan is not None:
-                    if fan.fan_on != (args.fan == "on"):
-                        changed = True
-                    fan.fan_on = args.fan == "on"
-                if args.brightness is not None:
-                    if args.light is not None:
-                        print(
-                            "When specifying --brightness there is no "
-                            "reason to set --light"
-                        )
-                    if fan.light_brightness != args.brightness:
-                        changed = True
-                    fan.light_brightness = args.brightness
-                elif args.light is not None:
-                    if fan.light_on != (args.light == "on"):
-                        changed = True
-                    fan.light_on = args.light == "on"
-                if changed:
-                    await asyncio.sleep(0.5)
-                    print_fan_state("New State", fan)
+        fan = await aiosenseme.discover(args.name, 2)
+        if fan is None:
+            print(f"Fan/Room/IP address '{args.name}' not found")
+            return
+        print_fan(fan)
+        print_fan_state("State", fan)
+        try:
+            changed = False
+            if args.whoosh is not None:
+                print(f"whoosh={args.whoosh}")
+                if fan.fan_whoosh != (args.whoosh == "on"):
+                    changed = True
+                fan.fan_whoosh = args.whoosh == "on"
+            if args.speed is not None:
+                if args.fan is not None:
+                    print(
+                        "When specifying --fanspeed there is no " "reason to set --fan"
+                    )
+                if fan.fan_speed != args.speed:
+                    changed = True
+                fan.fan_speed = args.speed
+            elif args.fan is not None:
+                if fan.fan_on != (args.fan == "on"):
+                    changed = True
+                fan.fan_on = args.fan == "on"
+            if args.brightness is not None:
+                if args.light is not None:
+                    print(
+                        "When specifying --brightness there is no "
+                        "reason to set --light"
+                    )
+                if fan.light_brightness != args.brightness:
+                    changed = True
+                fan.light_brightness = args.brightness
+            elif args.light is not None:
+                if fan.light_on != (args.light == "on"):
+                    changed = True
+                fan.light_on = args.light == "on"
+            if changed:
+                await asyncio.sleep(0.5)
+                print_fan_state("New State", fan)
 
-            finally:
-                fan.stop()
+        finally:
+            fan.stop()
 
 
 def cli():

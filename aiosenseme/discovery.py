@@ -15,11 +15,11 @@ import inspect
 import logging
 import random
 import socket
-import threading
 import time
 import traceback
 
 import ifaddr
+
 from .fan import SensemeFan
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,102 +33,99 @@ class SensemeDiscoveryEndpoint:
     receive_queue = asyncio.Queue()
 
     def __init__(self, ip: str = None):
-        self._opened = False
-        self._transport = None
-        self._ip = ip
+        """Initialize Senseme Discovery Endpoint."""
+        self.opened = False
+        self.transport = None
+        self.ip = ip
 
     def abort(self):
         """Close the transport immediately.
+
         Buffered write data will be lost.
         """
-        self._opened = False
-        if self._transport is None:
+        self.opened = False
+        if self.transport is None:
             return
-        self._transport.abort()
+        self.transport.abort()
         self.close()
 
     def close(self):
         """Close the transport gracefully.
+
         Buffered write data will be sent.
         """
-        self._opened = False
-        if self._transport is None:
+        self.opened = False
+        if self.transport is None:
             return
         self.receive_queue.put_nowait(None)  # tell receive() socket is closed
-        if self._transport:
-            self._transport.close()
+        if self.transport:
+            self.transport.close()
 
     def is_closing(self) -> bool:
         """Return True if the endpoint is closed or closing."""
-        if not self._opened:
+        if not self.opened:
             return False  # unopened connection is not closed
-        if self._transport is None:
+        if self.transport is None:
             return True  # opened connection but no transport is closed
-        return self._transport.is_closing()
+        return self.transport.is_closing()
 
     async def receive(self) -> SensemeFan:
         """Wait for discovered device and return it.
+
         Return None when the socket is closed.
         This method is a coroutine.
         """
         while True:
-            if self.receive_queue.empty() and self._transport.is_closing():
+            if self.receive_queue.empty() and self.transport.is_closing():
                 return None
             rsp = await self.receive_queue.get()
             if rsp is None:
                 return None
-            try:
-                msg = rsp[0]
-                addr = rsp[1]
-                if len(msg) > 200 or len(msg) < 31:
-                    continue
-                if msg[0] != "(" or msg[-1] != ")":
-                    continue
-                msg = msg[1:-1]
-                msg_data = msg.split(";")
-                if len(msg_data) != 5:
-                    continue
-                _LOGGER.debug("Received '%s' from %s on %s" % (msg, addr, self._ip))
-                device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
-                return device
-            except Exception as e:
-                _LOGGER.error(
-                    "Failed to parse discovery response %s from %s, error: %s"
-                    % (msg, addr, str(e))
-                )
+            msg = rsp[0]
+            addr = rsp[1]
+            if len(msg) > 200 or len(msg) < 31:
+                continue
+            if msg[0] != "(" or msg[-1] != ")":
+                continue
+            msg = msg[1:-1]
+            msg_data = msg.split(";")
+            if len(msg_data) != 5:
+                continue
+            _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
+            device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
+            return device
 
     def send_broadcast(self):
-        """Sends the SenseME Discovery broadcast packet."""
-        try:
-            if self._opened:
-                data = "<ALL;DEVICE;ID;GET>".encode("utf-8")
-                self._transport.sendto(data, ("<broadcast>", PORT))
-                _LOGGER.debug("Discovery broadcast on %s" % (self._ip))
-        except Exception:
-            _LOGGER.debug(
-                "Ignored broadcast error on %s\n%s" % (self._ip, traceback.format_exc())
-            )
+        """Send the SenseME Discovery broadcast packet."""
+        if not self.is_closing():
+            data = "<ALL;DEVICE;ID;GET>".encode("utf-8")
+            self.transport.sendto(data, ("<broadcast>", PORT))
+            _LOGGER.debug("Discovery broadcast on %s", self.ip)
 
 
 class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
     """Datagram protocol for SenseME Discovery."""
 
     def __init__(self, endpoint: SensemeDiscoveryEndpoint):
+        """Initialize Senseme Discovery Protocol."""
         self._endpoint = endpoint
 
     # Protocol methods
     def connection_made(self, transport: asyncio.Protocol):
-        self._endpoint._transport = transport
-        self._endpoint._opened = True
-        _LOGGER.debug("Listening on %s" % self._endpoint._ip)
+        """Socket connect on SenseME Discovery Protocol."""
+        self._endpoint.transport = transport
+        self._endpoint.opened = True
+        _LOGGER.debug("Listening on %s", self._endpoint.ip)
         self._endpoint.send_broadcast()
 
-    def connection_lost(self, exe: Exception):
-        _LOGGER.debug("Listener closed on %s" % self._endpoint._ip)
+    def connection_lost(self, exc):  # pylint: disable=unused-argument
+        """Lost connection SenseME Discovery Protocol."""
+        _LOGGER.debug("Listener closed on %s", self._endpoint.ip)
         self._endpoint.close()  # half-closed connections are not permitted
 
     # Datagram protocol methods
     def datagram_received(self, data: str, addr: str):
+        """UDP packet received on SenseME Discovery Protocol."""
         if data:
             msg = data.decode("utf-8")
             try:
@@ -136,9 +133,10 @@ class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
             except asyncio.QueueFull:
                 _LOGGER.error("Receive queue full")
 
-    def error_received(self, exe):
+    def error_received(self, exc):
+        """Error on SenseME Discovery Protocol."""
         _LOGGER.debug(
-            "Endpoint error on %s\n%s" % (self._endpoint._ip, traceback.format_exc())
+            "Endpoint error on %s\n%s", self._endpoint.ip, traceback.format_exc()
         )
         self._endpoint.close()
 
@@ -152,21 +150,22 @@ class SensemeDiscovery:
 
     _devices = []  # all SensemeDiscovery objects use the same device list
 
-    def __init__(self, startFirst: bool = True, refreshMinutes: int = 5):
-        threading.Thread.__init__(self)
-        # will start and update device before announcing discovery
-        self.startFirst = startFirst
-        self.refreshMinutes = refreshMinutes
+    def __init__(self, start_first: bool = True, refresh_minutes: int = 5):
+        """Initialize Senseme Discovery Protocol."""
+        self.start_first = start_first
+        self.refresh_minutes = refresh_minutes
         self._is_running = False
         self._callbacks = []
+        self._broadcaster_task = None
 
     @property
     def devices(self):
-        """Gets the current list of discovered fans."""
+        """Get the current list of discovered fans."""
         return self._devices
 
     def add_callback(self, callback):
         """Add callback function/coroutine.
+
         Called when parameters are updated.
         """
         if callback not in self._callbacks:
@@ -184,44 +183,40 @@ class SensemeDiscovery:
             self._callbacks.remove(callback)
             _LOGGER.debug("Removed callback")
 
+    async def _create_endpoints(self):
+        """Create an endpoint per interface and return as a list of endpoints."""
+        endpoints = []
+        loop = asyncio.get_event_loop()
+        for adapter in ifaddr.get_adapters():
+            for ip in adapter.ips:
+                if ip.is_IPv4:
+                    endpoint = SensemeDiscoveryEndpoint(ip.ip)
+                    # _LOGGER.debug("Found IPv4 %s", ip.ip)
+                    await loop.create_datagram_endpoint(
+                        lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
+                        local_addr=(ip.ip, PORT),
+                        family=socket.AF_INET,
+                        allow_broadcast=True,
+                        reuse_port=True,
+                    )
+                    endpoints.append(endpoint)
+        return endpoints
+
     async def _broadcaster(self):
         """Periodically broadcast discovery packet.
+
         If the underlying socket has an error this task will exit.
         This method is a coroutine.
         """
         self._is_running = True
         loop = asyncio.get_event_loop()
-        error_count = 0
         device = None
         while True:
-            if error_count > 10:
-                _LOGGER.debug("Too many errors, broadcaster task aborted")
-                break
             try:
                 found_new = 0
                 found_total = 0
-                endpoints = []
                 found_devices = []
-                for adapter in ifaddr.get_adapters():
-                    for ip in adapter.ips:
-                        if isinstance(ip.ip, str) and "127.0.0.1" not in ip.ip:
-                            endpoint = SensemeDiscoveryEndpoint(ip.ip)
-                            # _LOGGER.debug("Found IP %s" % ip.ip)
-                            try:
-                                await loop.create_datagram_endpoint(
-                                    lambda: SensemeDiscoveryProtocol(endpoint),
-                                    local_addr=(ip.ip, PORT),
-                                    family=socket.AF_INET,
-                                    allow_broadcast=True,
-                                    reuse_port=True,
-                                )
-                                endpoints.append(endpoint)
-                            except Exception:
-                                _LOGGER.error(
-                                    "Error opening broadcast listener socket on %s\n%s"
-                                    % (ip.ip, traceback.format_exc())
-                                )
-                                error_count += 1
+                endpoints = await self._create_endpoints()
                 start = time.time()
                 while True:
                     try:
@@ -230,8 +225,7 @@ class SensemeDiscovery:
                         device = None
                         if time.time() - start < 5:
                             for endpoint in endpoints:
-                                if not endpoint.is_closing():
-                                    endpoint.send_broadcast()
+                                endpoint.send_broadcast()
                         else:
                             for endpoint in endpoints:
                                 endpoint.abort()
@@ -239,55 +233,48 @@ class SensemeDiscovery:
                             break
                     if device is not None:
                         if device not in self._devices:
-                            if self.startFirst:
+                            if self.start_first:
                                 if await device.update():
                                     self._devices.append(device)
-                                    _LOGGER.debug("Discovered %s" % (device))
+                                    _LOGGER.debug("Discovered %s", device)
                                     found_new += 1
                                 else:
-                                    _LOGGER.debug("Failed to start %s" % (device.name))
+                                    _LOGGER.debug("Failed to start %s", device.name)
                             else:
                                 if await device.fill_out_secondary_info():
                                     self._devices.append(device)
-                                    _LOGGER.debug("Discovered %s" % (device))
+                                    _LOGGER.debug("Discovered %s", device)
                                     found_new += 1
                                 else:
                                     _LOGGER.debug(
-                                        "Failed to retrieve secondary info for %s"
-                                        % (device.name)
+                                        "Failed to retrieve secondary info for %s",
+                                        device.name,
                                     )
                         if device not in found_devices:
                             found_devices.append(device)
                             found_total += 1
                         for callback in self._callbacks:
-                            try:
-                                if inspect.iscoroutinefunction(callback):
-                                    loop.create_task(callback(self._devices.copy()))
-                                else:
-                                    callback(self._devices.copy())
-                            except Exception:
-                                _LOGGER.error(
-                                    "Callback error\n%s" % (traceback.format_exc())
-                                )
-                error_count = 0
+                            if inspect.iscoroutinefunction(callback):
+                                loop.create_task(callback(self._devices.copy()))
+                            else:
+                                callback(self._devices.copy())
                 found_old = found_total - found_new
                 found_devices = None
-
                 if found_old > 1:
                     _LOGGER.debug(
-                        "Discovered %s existing fan%s"
-                        % (found_old, "" if found_old == 1 else "s",)
+                        "Discovered %s existing fan%s",
+                        found_old,
+                        "" if found_old == 1 else "s",
                     )
                 elif found_new == 0:
                     _LOGGER.debug("Discovered 0 fans")
-                await asyncio.sleep(self.refreshMinutes * 60 + random.uniform(-10, 10))
+                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
             except asyncio.CancelledError:
                 _LOGGER.debug("Broadcaster task cancelled")
                 return
             except Exception:
-                _LOGGER.error("Broadcaster task error\n%s" % traceback.format_exc())
-                error_count += 1
-                await asyncio.sleep(1)
+                _LOGGER.error("Broadcaster task error\n%s", traceback.format_exc())
+                raise
             finally:
                 for endpoint in endpoints:
                     endpoint.abort()
@@ -296,7 +283,8 @@ class SensemeDiscovery:
         _LOGGER.error("Broadcaster task ended")
 
     def start(self):
-        """Starts both broadcaster and listener tasks.
+        """Start both broadcaster and listener tasks.
+
         Will maintain a list of discovered fans.
         """
         if not self._is_running:
@@ -304,7 +292,8 @@ class SensemeDiscovery:
             self._broadcaster_task = loop.create_task(self._broadcaster())
 
     def stop(self):
-        """Stops both broadcaster and listener tasks.
+        """Stop both broadcaster and listener tasks.
+
         Any discovered fans will remain in memory and will continue to update.
         """
         if self._is_running is True:
@@ -312,7 +301,8 @@ class SensemeDiscovery:
             self._is_running = False
 
     def remove_discovered_devices(self):
-        """Stops both broadcaster and listener tasks.
+        """Stop both broadcaster and listener tasks.
+
         Any discovered fans will be stopped and removed from memory.
         """
         self.stop()
@@ -321,24 +311,26 @@ class SensemeDiscovery:
         self._devices = []
 
 
-async def Discover_Any(timeoutSeconds=5) -> bool:
+async def discover_any(timeout_seconds=5) -> bool:
     """Return True if any SenseME fans are found on the network.
-    This function will always take timeoutSeconds to complete.
+
+    This function will always take timeout_seconds to complete.
     This method is a coroutine.
     """
     discovery = SensemeDiscovery(True, 1)
     discovery.start()
-    await asyncio.sleep(timeoutSeconds)
+    await asyncio.sleep(timeout_seconds)
     count = len(discovery.devices)
     discovery.stop()
-    _LOGGER.debug("Discovered %s fan%s" % (count, "" if count == 1 else "s"))
+    _LOGGER.debug("Discovered %s fan%s", count, "" if count == 1 else "s")
     return count > 0
 
 
-async def Discover(name, timeoutSeconds=5) -> SensemeFan:
-    """Discover a fan with a specific name or room name.
+async def discover(value, timeout_seconds=5) -> SensemeFan:
+    """Discover a fan with a fan name, room name or IP Address.
+
     None is returned if the fan was not found.
-    This function will take up timeoutSeconds to complete.
+    This function will take up timeout_seconds to complete.
     This method is a coroutine.
     """
     start = time.time()
@@ -349,9 +341,9 @@ async def Discover(name, timeoutSeconds=5) -> SensemeFan:
             await asyncio.sleep(0.1)
             devices = discovery.devices.copy()
             for device in devices:
-                if device == name:
+                if device == value:
                     return device
-            if time.time() - start > timeoutSeconds:
+            if time.time() - start > timeout_seconds:
                 return None
     finally:
         discovery.stop()
