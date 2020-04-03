@@ -12,6 +12,7 @@ Source can be found at https://github.com/mikelawrence/aiosenseme
 """
 import asyncio
 import inspect
+import ipaddress
 import logging
 import random
 import socket
@@ -189,7 +190,7 @@ class SensemeDiscovery:
         loop = asyncio.get_event_loop()
         for adapter in ifaddr.get_adapters():
             for ip in adapter.ips:
-                if ip.is_IPv4:
+                if ip.is_IPv4 and not ipaddress.ip_address(ip.ip).is_loopback:
                     endpoint = SensemeDiscoveryEndpoint(ip.ip)
                     # _LOGGER.debug("Found IPv4 %s", ip.ip)
                     await loop.create_datagram_endpoint(
@@ -197,7 +198,6 @@ class SensemeDiscovery:
                         local_addr=(ip.ip, PORT),
                         family=socket.AF_INET,
                         allow_broadcast=True,
-                        reuse_port=True,
                     )
                     endpoints.append(endpoint)
         return endpoints

@@ -1,12 +1,19 @@
 # Changelog for aiosenseme library
 
+## v0.3.1
+
+* SensemeFan.room_type now reports the room correctly.
+* Removed socket option reuse_port for discovery as is appears to not work on MacOS
+  and really isn't needed.
+* Discovery no longer listens on loopback interface.
+
 ## v0.3.0
 
 * Lots of linting changes.
 * API breaking changes.
   * aiosenseme.Discover() is now aiosenseme.discover()
   * aiosenseme.Discover_Any() is now aiosenseme.discover_any()
-* Aiosenseme.discover() will now match Fan Name, Room Name and IP address
+* aiosenseme.discover() will now match Fan Name, Room Name and IP address
 
 ## v0.2.1
 

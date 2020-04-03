@@ -1,6 +1,6 @@
 # aiosenseme library
 
-[![PyPI version](https://badge.fury.io/py/aiosenseme.svg)](https://badge.fury.io/py/aiosenseme)
+[![PyPI version](https://badge.fury.io/py/aiosenseme.svg)](https://badge.fury.io/py/aiosenseme) [![Downloads](https://pepy.tech/badge/aiosenseme)](https://pepy.tech/project/aiosenseme)
 
 This asynchronous Python library provides periodic discovery, control and push-based status for SenseME fans by Big Ass Fans. It was developed mainly to provide access to SenseME fans for [Home Assistant](https://www.home-assistant.io/) using asyncio but should work fine in other applications.
 

@@ -44,8 +44,9 @@ setup(
         "Intended Audience :: Developers",
         "Framework :: AsyncIO",
         "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
         "Topic :: Home Automation",
     ],
-    keywords="HaikuHome SenseME fan home automation bigassfans",
+    keywords="Haiku HaikuHome SenseME fan home automation BigAssFans",
     python_requires=">=3.6",
 )

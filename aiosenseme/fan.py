@@ -31,34 +31,35 @@ ONOFF = ["ON", "OFF"]
 DIRECTIONS = ["FWD", "REV"]
 AUTOCOMFORTS = ["OFF", "COOLING", "HEATING", "FOLLOWTSTAT"]
 ROOM_TYPES = [
-    "Undefined",
-    "Master Bedroom",
-    "Bedroom",
-    "Den",
-    "Family Room",
-    "Living Room",
-    "Kids Room",
-    "Kitchen",
-    "Dining Room",
-    "Basement",
-    "Office",
-    "Patio",
-    "Porch",
-    "Hallway",
-    "Entryway",
-    "Bathroom",
-    "Laundry",
-    "Stairs",
-    "Closet",
-    "Sunroom",
-    "Media Room",
-    "Gym",
-    "Garage",
-    "Outside",
-    "Loft",
-    "Playroom",
-    "Pantry",
-    "Mudroom",
+    "Undefined",  # 0, not in a room
+    "Other",  # 1
+    "Master Bedroom",  # 2
+    "Bedroom",  # 3
+    "Den",  # 4
+    "Family Room",  # 5
+    "Living Room",  # 6
+    "Kids Room",  # 7
+    "Kitchen",  # 8
+    "Dining Room",  # 9
+    "Basement",  # 10
+    "Office",  # 11
+    "Patio",  # 12
+    "Porch",  # 13
+    "Hallway",  # 14
+    "Entryway",  # 15
+    "Bathroom",  # 16
+    "Laundry",  # 17
+    "Stairs",  # 18
+    "Closet",  # 19
+    "Sunroom",  # 20
+    "Media Room",  # 21
+    "Gym",  # 22
+    "Garage",  # 23
+    "Outside",  # 24
+    "Loft",  # 25
+    "Playroom",  # 26
+    "Pantry",  # 27
+    "Mudroom",  # 28
 ]
 
 FAN_MODEL_TYPES = {
