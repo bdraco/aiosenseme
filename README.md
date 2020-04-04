@@ -26,7 +26,7 @@ Studio Vault Fan
   Token: 73264cb2-1234-1234-1234-012345678913
 ```
 
-Here both the fan speed is set and the light is turned on. The room name was used to set the fan so all fans in that room changed to the same state. Keep in mind that changing an individual fan that is a member of a room will do the same thing. Notice also that Whoosh was turned off when the fan speed was set specific value.
+Here both the fan speed is set and the light is turned on. The room name (Studio Fans) was used to set the fan so all fans in that room changed to the same state. Keep in mind that changing an individual fan that is a member of a room will do the same thing. Notice also that Whoosh was turned off when the fan speed was set specific value.
 
 ```console
 $ aiosenseme --name "Studio Fans" --speed 3 --light on
@@ -35,8 +35,8 @@ Studio Beam Fan
   Model: Haiku Fan with light, FW Version: 2.5.0
   IP Addr: 192.168.1.2, MAC Addr: FF:FF:FF:FF:FF:FF
   Token: 73264cb2-1234-1234-1234-012345678912
-State: Fan is on (speed: 2), Light is off, Whoosh: ON
-New State: Fan is on (speed: 3), Light is on (brightness: 16), Whoosh: OFF
+State: Fan is on (speed: 2), Light is off, Whoosh: on
+New State: Fan is on (speed: 3), Light is on (brightness: 16), Whoosh: off
 ```
 
 You can also select the fan by IP address.
@@ -48,20 +48,20 @@ Studio Vault Fan
   Model: Haiku Fan with light, FW Version: 2.5.0
   IP Addr: 192.168.1.3, MAC Addr: FF:FF:FF:FF:FF:FF
   Token: 73264cb2-1234-1234-1234-012345678912
-State: Fan is off, Light is off, Whoosh: ON
-New State: Fan is on (speed: 4), Light is off, Whoosh: OFF
+State: Fan is off, Light is off, Whoosh: on
+New State: Fan is on (speed: 4), Light is off, Whoosh: off
 ```
 
 To just read the fan state type the following.
 
 ```console
-$ aiosenseme -n 192.168.1.3
+$ aiosenseme -n "Studio Vault Fan"
 Studio Vault Fan
   Room Name: Studio Fans, Room Type: Family Room
   Model: Haiku Fan with light, FW Version: 2.5.0
   IP Addr: 192.168.1.3, MAC Addr: FF:FF:FF:FF:FF:FF
   Token: 73264cb2-1234-1234-1234-012345678912
-State: Fan is off, Light is off, Whoosh: ON
+State: Fan is off, Light is off, Whoosh: off
 ```
 
 ## Requirements
