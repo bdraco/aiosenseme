@@ -1,5 +1,11 @@
 # Changelog for aiosenseme library
 
+## v0.3.2
+
+* Add H-Series Haiku fan to known model list. Fan reports a slightly different model string for the Haiku Fan.
+* Add model list to command line arguments.
+* Add exception handling when creating discovery sockets. This should help the issue of a socket error on one network interface preventing discovery from working other network interfaces.
+
 ## v0.3.1
 
 * SensemeFan.room_type now reports the room correctly.

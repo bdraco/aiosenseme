@@ -65,7 +65,7 @@ class SensemeDiscoveryEndpoint:
     def is_closing(self) -> bool:
         """Return True if the endpoint is closed or closing."""
         if not self.opened:
-            return False  # unopened connection is not closed
+            return True  # unopened connection is closed
         if self.transport is None:
             return True  # opened connection but no transport is closed
         return self.transport.is_closing()
@@ -137,7 +137,7 @@ class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
     def error_received(self, exc):
         """Error on SenseME Discovery Protocol."""
         _LOGGER.debug(
-            "Endpoint error on %s\n%s", self._endpoint.ip, traceback.format_exc()
+            "Protocol error on %s\n%s", self._endpoint.ip, traceback.format_exc()
         )
         self._endpoint.close()
 
@@ -188,18 +188,35 @@ class SensemeDiscovery:
         """Create an endpoint per interface and return as a list of endpoints."""
         endpoints = []
         loop = asyncio.get_event_loop()
+        listening = 0
         for adapter in ifaddr.get_adapters():
             for ip in adapter.ips:
                 if ip.is_IPv4 and not ipaddress.ip_address(ip.ip).is_loopback:
                     endpoint = SensemeDiscoveryEndpoint(ip.ip)
                     # _LOGGER.debug("Found IPv4 %s", ip.ip)
-                    await loop.create_datagram_endpoint(
-                        lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
-                        local_addr=(ip.ip, PORT),
-                        family=socket.AF_INET,
-                        allow_broadcast=True,
-                    )
-                    endpoints.append(endpoint)
+                    try:
+                        await loop.create_datagram_endpoint(
+                            lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
+                            local_addr=(ip.ip, PORT),
+                            family=socket.AF_INET,
+                            allow_broadcast=True,
+                        )
+                        endpoints.append(endpoint)
+                        listening += 1
+                    except OSError:
+                        last_error = (
+                            f"Create datagram endpoint error on {ip.ip}\n" 
+                            f"{traceback.format_exc()}"
+                        )
+                        _LOGGER.debug(last_error)
+        if listening == 0:
+            # failed to bind to any address
+            _LOGGER.error(
+                "Failed to listen for discovery responses on any address. "
+                "Last error\n%s",
+                last_error,
+            )
+
         return endpoints
 
     async def _broadcaster(self):

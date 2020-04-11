@@ -64,6 +64,7 @@ ROOM_TYPES = [
 
 FAN_MODEL_TYPES = {
     "FAN,HAIKU,SENSEME": "Haiku Fan",
+    "FAN,HAIKU,HSERIES": "Haiku Fan",  # H Series is now called plain Haiku
     "FAN,LSERIES": "Haiku L Fan",
 }
 
@@ -327,9 +328,13 @@ class SensemeFan:
         return FAN_MODEL_TYPES.get(self._model.upper(), self._model.upper())
 
     @classmethod
-    def models(cls):
+    def models(cls) -> list:
         """Return list of possible model names."""
-        return list(FAN_MODEL_TYPES.values())
+        no_duplicates = []
+        for model_name in FAN_MODEL_TYPES.values():
+            if model_name not in no_duplicates:
+                no_duplicates.append(model_name)
+        return no_duplicates
 
     @property
     def fw_version(self) -> str:

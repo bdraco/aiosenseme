@@ -64,6 +64,7 @@ Studio Vault Fan
 State: Fan is off, Light is off, Whoosh: off
 ```
 
-## Requirements
+## Issues
 
-SenseME devices communicate on UDP port 31415 using broadcast and unicast traffic this port must be available and not blocked by a firewall.
+* UDP port 31415 must be available and not blocked by a firewall.
+* This library will not handle multiple instances of discovery running on the same machine.

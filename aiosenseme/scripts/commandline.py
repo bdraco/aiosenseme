@@ -36,6 +36,14 @@ ARGS.add_argument(
     help="discover all fans on the network",
 )
 ARGS.add_argument(
+    "-m",
+    "--models",
+    action="store_true",
+    dest="models",
+    default=False,
+    help="list known fan models",
+)
+ARGS.add_argument(
     "-n",
     "--name",
     action="store",
@@ -164,6 +172,17 @@ async def process_args():
             await asyncio.sleep(4)
         finally:
             discovery.stop()
+    elif args.models is True:
+        msg = "Known fan models: "
+        first = True
+        for model in SensemeFan.models():
+            if first:
+                first = False
+                msg += model
+            else:
+                msg += ", " + model
+        print(msg)
+        return
     else:
         if args.name is None:
             print("You must specify a fan name using -n or --name")
