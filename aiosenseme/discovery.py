@@ -92,6 +92,9 @@ class SensemeDiscoveryEndpoint:
             msg_data = msg.split(";")
             if len(msg_data) != 5:
                 continue
+            if msg_data[4] == "SWITCH,SENSEME":
+                _LOGGER.debug("Ignored Wall Switch '%s' on %s", msg, self.ip)
+                continue
             _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
             device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
             return device
@@ -205,7 +208,7 @@ class SensemeDiscovery:
                         listening += 1
                     except OSError:
                         last_error = (
-                            f"Create datagram endpoint error on {ip.ip}\n" 
+                            f"Create datagram endpoint error on {ip.ip}\n"
                             f"{traceback.format_exc()}"
                         )
                         _LOGGER.debug(last_error)

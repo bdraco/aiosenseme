@@ -1,5 +1,10 @@
 # Changelog for aiosenseme library
 
+## v0.3.3
+
+* Ignore Wireless Wall Controllers. It appears this library will connect to them and cause lockups requiring a reset.
+* Add error logging for unhandled exceptions in SensemeDiscovery._updater() and SensemeFan._listener().
+
 ## v0.3.2
 
 * Add H-Series Haiku fan to known model list. Fan reports a slightly different model string for the Haiku Fan.
@@ -9,8 +14,7 @@
 ## v0.3.1
 
 * SensemeFan.room_type now reports the room correctly.
-* Removed socket option reuse_port for discovery as is appears to not work on MacOS
-  and really isn't needed.
+* Removed socket option reuse_port for discovery as is appears to not work on MacOS and really isn't needed.
 * Discovery no longer listens on loopback interface.
 
 ## v0.3.0

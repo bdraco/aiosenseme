@@ -804,6 +804,14 @@ class SensemeFan:
                     "%s: Updater task error\n%s", self._name, traceback.format_exc()
                 )
                 await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
+            except Exception:
+                _LOGGER.error(
+                    "%s: Unhandled updater task error\n%s",
+                    self._name,
+                    traceback.format_exc(),
+                )
+                await asyncio.sleep(10)
+                raise
         _LOGGER.error("%s: Updater task ended", self._name)
 
     async def _listener(self):
@@ -920,6 +928,11 @@ class SensemeFan:
                 )
                 self._error_count += 1
                 await asyncio.sleep(1)
+            except Exception:
+                _LOGGER.error(
+                    "%s: Listener task error\n%s", self._name, traceback.format_exc()
+                )
+                raise
         _LOGGER.error("%s: Listener task ended", self._name)
 
     def start(self):
