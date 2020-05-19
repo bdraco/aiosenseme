@@ -8,6 +8,14 @@ This library (based on [TomFaulkner's](https://github.com/TomFaulkner/SenseMe) l
 
 Sniffing the packets and documenting the protocol was the work of [Bruce](http://bruce.pennypacker.org/tag/senseme-plugin/). His work in making an [Indigo plugin](https://github.com/bpennypacker/SenseME-Indigo-Plugin) made this library possible.
 
+## Model Notes
+
+* Confirmed support of Haiku, Haiku H, and Haiku L fans.
+* Probably supports Haiku C fans.
+* The [i6 fan](https://www.bigassfans.com/fans/i6/) is NOT currently supported.
+* The discontinued standalone [Haiku Light](https://www.bigassfans.com/support/haiku-light/) is NOT currently supported. There is a [chance](https://github.com/mikelawrence/senseme-hacs/issues/7) it will be supported in the future.
+* The discontinued [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) is NOT currently supported. There is a [chance](https://github.com/mikelawrence/senseme-hacs/issues/4) it will be supported in the future.
+
 ## Command line access
 
 The aiosenseme package now installs a command line script along with the package. To discover all fans on the network type the following.
@@ -66,5 +74,6 @@ State: Fan is off, Light is off, Whoosh: off
 
 ## Issues
 
+* Early testing indicates the i6 fan from Big Ass Fans is not compatible with this library. The Big Ass Fans [website](https://www.bigassfans.com/fans/i6/) says the i6 fan has SenseME technology but it uses a different app which requires Bluetooth for initial setup. There is some [evidence](https://github.com/mikelawrence/senseme-hacs/issues/5) that WiFi is still used to control the fan from the app once setup.
 * UDP port 31415 must be available and not blocked by a firewall.
 * This library will not handle multiple instances of discovery running on the same machine.
