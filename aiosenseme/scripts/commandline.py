@@ -290,10 +290,10 @@ async def process_args():
                         changed = True
                     device.light_on = args.light == "on"
                 if args.colortemp is not None:
-                    args.brightness = int(round(args.brightness / 100.0)) * 100
-                    if device.colortemp != args.brightness:
+                    args.colortemp = int(round(args.colortemp / 100.0)) * 100
+                    if device.light_colortemp != args.colortemp:
                         changed = True
-                    device.colortemp = args.brightness
+                    device.light_colortemp = args.colortemp
             if changed:
                 await asyncio.sleep(0.5)
                 print_state("New State", device)

@@ -66,7 +66,7 @@ FAN_MODEL_TYPES = {
     "FAN,HAIKU,SENSEME": "Haiku Fan",
     "FAN,HAIKU,HSERIES": "Haiku Fan",  # H Series is now called plain Haiku
     "FAN,LSERIES": "Haiku L Fan",
-    "LIGHT,HAIKU;": "Haiku Light",
+    "LIGHT,HAIKU": "Haiku Light",
 }
 
 
@@ -714,7 +714,7 @@ class SensemeFan:
         if color_temp > self.light_colortemp_max:
             color_temp = self.light_colortemp_max
         color_temp = int(round(color_temp / 100.0)) * 100
-        self._send_command(f"LIGHT;COLOR;TEMP;SET;{color_temp}")
+        self._send_command(f"LIGHT;COLOR;TEMP;VALUE;SET;{color_temp}")
 
     @property
     def light_colortemp_min(self) -> int:
