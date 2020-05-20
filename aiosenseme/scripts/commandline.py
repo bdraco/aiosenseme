@@ -10,7 +10,7 @@ from aiosenseme import SensemeDiscovery, SensemeFan
 from aiosenseme import __version__
 
 ARGS = argparse.ArgumentParser(
-    description="Discover and control Haiku/SenseME fans by Big Ass Fans."
+    description="Discover and control SenseME devices by Big Ass Fans."
 )
 ARGS.add_argument(
     "-V",
@@ -19,6 +19,13 @@ ARGS.add_argument(
     dest="version",
     default=False,
     help="display version number",
+)
+ARGS.add_argument(
+    "--listen",
+    action="store",
+    dest="listen",
+    default=None,
+    help="listen to SenseME device name or IP address",
 )
 ARGS.add_argument(
     "--debug",
@@ -33,7 +40,7 @@ ARGS.add_argument(
     action="store_true",
     dest="discover",
     default=False,
-    help="discover all fans on the network",
+    help="discover all SenseME devices on the network",
 )
 ARGS.add_argument(
     "-m",
@@ -41,7 +48,7 @@ ARGS.add_argument(
     action="store_true",
     dest="models",
     default=False,
-    help="list known fan models",
+    help="list known SenseME device models",
 )
 ARGS.add_argument(
     "-n",
@@ -49,7 +56,7 @@ ARGS.add_argument(
     action="store",
     dest="name",
     default=None,
-    help="fan name, room name or IP address",
+    help="SenseME device name, room name or IP address",
 )
 ARGS.add_argument(
     "-p",
@@ -96,30 +103,33 @@ ARGS.add_argument(
     dest="whoosh",
     default=None,
     choices=["on", "off"],
-    help="whoosh mode",
+    help="fan whoosh mode",
 )
 
 # array of discovered devices
 _DEVICES = []
 
 
-def print_fan(fan: SensemeFan):
-    """Print information about fan."""
-    msg = f"{fan.name}\n"
-    if fan.room_status:
-        msg += f"  Room Name: {fan.room_name}, Room Type: {fan.room_type}\n"
-    if fan.has_light:
-        msg += f"  Model: {fan.model} with light, "
+def print_device(device: SensemeFan):
+    """Print information about a device."""
+    msg = f"{device.name}\n"
+    if device.room_status:
+        msg += f"  Room Name: {device.room_name}, Room Type: {device.room_type}\n"
+    if device.is_fan:
+        if device.has_light:
+            msg += f"  Model: {device.model} with light, "
+        else:
+            msg += f"  Model: {device.model} without light, "
     else:
-        msg += f"  Model: {fan.model} without light, "
-    msg += f"FW Version: {fan.fw_version}\n"
-    msg += f"  IP Addr: {fan.ip}, MAC Addr: {fan.mac}\n"
-    msg += f"  Token: {fan.network_token}"
+        msg += f"  Model: {device.model}, "
+    msg += f"FW Version: {device.fw_version}\n"
+    msg += f"  IP Addr: {device.ip}, MAC Addr: {device.mac}\n"
+    msg += f"  Token: {device.network_token}"
     print(msg)
 
 
 def print_fan_state(prefix: str, fan: SensemeFan):
-    """Print information about fan current state."""
+    """Print information about a fan's current state."""
     msg = prefix
     if fan.fan_on:
         msg += f": Fan is on (speed: {fan.fan_speed})"
@@ -136,17 +146,17 @@ def print_fan_state(prefix: str, fan: SensemeFan):
     print(msg)
 
 
-async def discovered(fans: List[SensemeFan]):
-    """Discovered fan callback function.
+async def discovered(devices: List[SensemeFan]):
+    """Discovered SenseME device callback function.
 
-    Called when discovery has detected a SenseME fan.
+    Called when discovery has detected a SenseME device.
     Each time a device is discovered all devices discovered are reported.
     """
     global _DEVICES
-    for fan in fans:
-        if fan not in _DEVICES:
-            _DEVICES.append(fan)
-            print_fan(fan)
+    for device in devices:
+        if device not in _DEVICES:
+            _DEVICES.append(device)
+            print_device(device)
 
 
 async def process_args():
@@ -164,6 +174,16 @@ async def process_args():
             "of the GNU General Public License <http://www.gnu.org/licenses/gpl.html>."
         )
         print("There is NO WARRANTY, to the extent permitted by law.")
+    elif args.listen is not None:
+        # Force debugging on
+        logging.basicConfig(level=logging.DEBUG)
+        device = await aiosenseme.discover(args.listen, 5)
+        if device is None:
+            print(f"Name/Room/IP address '{args.listen}' not found")
+            return
+        while True:
+            await asyncio.sleep(4)
+
     elif args.discover is True:
         try:
             discovery = SensemeDiscovery(True, 1)
@@ -173,7 +193,7 @@ async def process_args():
         finally:
             discovery.stop()
     elif args.models is True:
-        msg = "Known fan models: "
+        msg = "Known SenseME models: "
         first = True
         for model in SensemeFan.models():
             if first:
@@ -185,13 +205,13 @@ async def process_args():
         return
     else:
         if args.name is None:
-            print("You must specify a fan name using -n or --name")
+            print("You must specify a SenseME device name using -n or --name")
             return
         fan = await aiosenseme.discover(args.name, 2)
         if fan is None:
-            print(f"Fan/Room/IP address '{args.name}' not found")
+            print(f"Name/Room/IP address '{args.name}' not found")
             return
-        print_fan(fan)
+        print_device(fan)
         print_fan_state("State", fan)
         try:
             changed = False

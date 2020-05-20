@@ -66,6 +66,7 @@ FAN_MODEL_TYPES = {
     "FAN,HAIKU,SENSEME": "Haiku Fan",
     "FAN,HAIKU,HSERIES": "Haiku Fan",  # H Series is now called plain Haiku
     "FAN,LSERIES": "Haiku L Fan",
+    "LIGHT,HAIKU;": "Haiku Light",
 }
 
 
@@ -340,6 +341,16 @@ class SensemeFan:
     def fw_version(self) -> str:
         """Return the version of the firmware running on the SenseME fan."""
         return self._fw_version
+
+    @property
+    def is_fan(self) -> str:
+        """Return True if the device is a fan."""
+        return self.model != "Haiku Light"
+
+    @property
+    def is_light(self) -> str:
+        """Return True if the device is a standalone light."""
+        return self.model == "Haiku Light"
 
     @property
     def has_light(self) -> bool:
@@ -941,7 +952,7 @@ class SensemeFan:
             loop = asyncio.get_event_loop()
             self._listener_task = loop.create_task(self._listener())
             self._is_running = True
-            # _LOGGER.debug("%s: Started", self._name)
+            _LOGGER.debug("%s: Started", self._name)
 
     def stop(self):
         """Signals thread to stop and returns immediately."""

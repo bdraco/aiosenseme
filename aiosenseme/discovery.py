@@ -261,7 +261,7 @@ class SensemeDiscovery:
                                 else:
                                     _LOGGER.debug("Failed to start %s", device.name)
                             else:
-                                if await device.fill_out_secondary_info():
+                                if await device.fill_out_sec_info():
                                     self._devices.append(device)
                                     _LOGGER.debug("Discovered %s", device)
                                     found_new += 1
