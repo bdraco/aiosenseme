@@ -354,7 +354,7 @@ async def discover(value, timeout_seconds=5) -> SensemeFan:
     This method is a coroutine.
     """
     start = time.time()
-    discovery = SensemeDiscovery(True, 1)
+    discovery = SensemeDiscovery(False, 1)
     try:
         discovery.start()
         while True:
@@ -362,6 +362,9 @@ async def discover(value, timeout_seconds=5) -> SensemeFan:
             devices = discovery.devices.copy()
             for device in devices:
                 if device == value:
+                    await device.fill_out_sec_info()
+                    device.start()
+                    await device.update()
                     return device
             if time.time() - start > timeout_seconds:
                 return None

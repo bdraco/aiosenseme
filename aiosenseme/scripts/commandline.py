@@ -97,6 +97,16 @@ ARGS.add_argument(
     help="light brightness",
 )
 ARGS.add_argument(
+    "-c",
+    "--colortemp",
+    action="store",
+    dest="colortemp",
+    default=None,
+    type=int,
+    choices=range(2200, 5100, 100),
+    help="light color temperature",
+)
+ARGS.add_argument(
     "-w",
     "--whoosh",
     action="store",
@@ -128,21 +138,29 @@ def print_device(device: SensemeFan):
     print(msg)
 
 
-def print_fan_state(prefix: str, fan: SensemeFan):
-    """Print information about a fan's current state."""
+def print_state(prefix: str, device: SensemeFan):
+    """Print information about a devices's current state."""
     msg = prefix
-    if fan.fan_on:
-        msg += f": Fan is on (speed: {fan.fan_speed})"
+    if device.is_fan:
+        if device.fan_on:
+            msg += f": Fan is on (speed: {device.fan_speed}"
+            if device.fan_whoosh:
+                msg += ", Whoosh: on)"
+            else:
+                msg += ", Whoosh: off)"
+        else:
+            msg += ": Fan is off"
+        if device.light_on:
+            msg += f", Light is on (brightness: {device.light_brightness})"
+        else:
+            msg += ", Light is off"
+    elif device.is_light:
+        if device.light_on:
+            msg += f": Light is on (brightness: {device.light_brightness}, color temp: {device.light_colortemp})"
+        else:
+            msg += ": Light is off"
     else:
-        msg += ": Fan is off"
-    if fan.light_on:
-        msg += f", Light is on (brightness: {fan.light_brightness})"
-    else:
-        msg += ", Light is off"
-    if fan.fan_whoosh:
-        msg += ", Whoosh: on"
-    else:
-        msg += ", Whoosh: off"
+        msg += ": Unknown SenseME device"
     print(msg)
 
 
@@ -207,50 +225,80 @@ async def process_args():
         if args.name is None:
             print("You must specify a SenseME device name using -n or --name")
             return
-        fan = await aiosenseme.discover(args.name, 2)
-        if fan is None:
+        device = await aiosenseme.discover(args.name, 2)
+        if device is None:
             print(f"Name/Room/IP address '{args.name}' not found")
             return
-        print_device(fan)
-        print_fan_state("State", fan)
+        print_device(device)
+        print_state("State", device)
+        changed = False
         try:
-            changed = False
-            if args.whoosh is not None:
-                print(f"whoosh={args.whoosh}")
-                if fan.fan_whoosh != (args.whoosh == "on"):
-                    changed = True
-                fan.fan_whoosh = args.whoosh == "on"
-            if args.speed is not None:
-                if args.fan is not None:
-                    print(
-                        "When specifying --fanspeed there is no " "reason to set --fan"
-                    )
-                if fan.fan_speed != args.speed:
-                    changed = True
-                fan.fan_speed = args.speed
-            elif args.fan is not None:
-                if fan.fan_on != (args.fan == "on"):
-                    changed = True
-                fan.fan_on = args.fan == "on"
-            if args.brightness is not None:
-                if args.light is not None:
-                    print(
-                        "When specifying --brightness there is no "
-                        "reason to set --light"
-                    )
-                if fan.light_brightness != args.brightness:
-                    changed = True
-                fan.light_brightness = args.brightness
-            elif args.light is not None:
-                if fan.light_on != (args.light == "on"):
-                    changed = True
-                fan.light_on = args.light == "on"
+            if device.is_fan:
+                if args.whoosh is not None:
+                    print(f"whoosh={args.whoosh}")
+                    if device.fan_whoosh != (args.whoosh == "on"):
+                        changed = True
+                    device.fan_whoosh = args.whoosh == "on"
+                if args.speed is not None:
+                    if args.fan is not None:
+                        print(
+                            "When specifying --fanspeed there is no "
+                            "reason to set --fan"
+                        )
+                    if device.fan_speed != args.speed:
+                        changed = True
+                    device.fan_speed = args.speed
+                elif args.fan is not None:
+                    if device.fan_on != (args.fan == "on"):
+                        changed = True
+                    device.fan_on = args.fan == "on"
+                if device.has_light:
+                    if args.colortemp is not None:
+                        print("Fan lights do not have adjustable color temperature")
+                    if args.brightness is not None:
+                        if args.light is not None:
+                            print(
+                                "When specifying --brightness there is no "
+                                "reason to set --light"
+                            )
+                        if device.light_brightness != args.brightness:
+                            changed = True
+                        device.light_brightness = args.brightness
+                    elif args.light is not None:
+                        if device.light_on != (args.light == "on"):
+                            changed = True
+                        device.light_on = args.light == "on"
+                else:
+                    if (
+                        args.brightness is not None
+                        or args.light is not None
+                        or args.colortemp is not None
+                    ):
+                        print("Fan does not have a light to adjust")
+            else:
+                if args.brightness is not None:
+                    if args.light is not None:
+                        print(
+                            "When specifying --brightness there is no "
+                            "reason to set --light"
+                        )
+                    if device.light_brightness != args.brightness:
+                        changed = True
+                    device.light_brightness = args.brightness
+                elif args.light is not None:
+                    if device.light_on != (args.light == "on"):
+                        changed = True
+                    device.light_on = args.light == "on"
+                if args.colortemp is not None:
+                    args.brightness = int(round(args.brightness / 100.0)) * 100
+                    if device.colortemp != args.brightness:
+                        changed = True
+                    device.colortemp = args.brightness
             if changed:
                 await asyncio.sleep(0.5)
-                print_fan_state("New State", fan)
-
+                print_state("New State", device)
         finally:
-            fan.stop()
+            device.stop()
 
 
 def cli():

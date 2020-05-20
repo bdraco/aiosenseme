@@ -262,6 +262,7 @@ class SensemeFan:
                     else:
                         if cmd in rsp:
                             # correct response, return the value
+                            # _LOGGER.debug("Received response: '%s'", value)
                             return value
 
     async def fill_out_sec_info(self) -> bool:
@@ -283,7 +284,7 @@ class SensemeFan:
             )
             self._has_light = (
                 await self._query_fan(reader, writer, "DEVICE;LIGHT")
-            ).upper() == "PRESENT"
+            ).upper() in ("PRESENT", "PRESENT;COLOR")
             self._room_name = await self._query_fan(reader, writer, "GROUP;LIST")
             return True
         except OSError:
@@ -697,13 +698,39 @@ class SensemeFan:
         max_bright = int(values[1])
         return min_bright, max_bright
 
-    @light_brightness_limits_room.setter
-    def light_brightness_limits_room(self, speeds: Tuple):
-        """Set a tuple of the min and max light brightness for the room."""
-        if speeds[0] >= speeds[1]:
-            _LOGGER.error("Min speed cannot exceed max speed")
-            return
-        self._send_command(f"LIGHT;BOOKENDS;SET;{speeds[0]};{speeds[1]}")
+    @property
+    def light_colortemp(self) -> int:
+        """Return the light color temperature."""
+        level = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
+        if level:
+            return int(level)
+        return None
+
+    @light_colortemp.setter
+    def light_colortemp(self, color_temp: int):
+        """Set the light color temperature."""
+        if color_temp < self.light_colortemp_min:
+            color_temp = self.light_colortemp_min
+        if color_temp > self.light_colortemp_max:
+            color_temp = self.light_colortemp_max
+        color_temp = int(round(color_temp / 100.0)) * 100
+        self._send_command(f"LIGHT;COLOR;TEMP;SET;{color_temp}")
+
+    @property
+    def light_colortemp_min(self) -> int:
+        """Return the light color temperature minimum."""
+        min_color_temp = self._data.get("LIGHT;COLOR;TEMP;MIN", None)
+        if min_color_temp:
+            return int(min_color_temp)
+        return None
+
+    @property
+    def light_colortemp_max(self) -> int:
+        """Return the light color temperature maximum."""
+        max_color_temp = self._data.get("LIGHT;COLOR;TEMP;MAX", None)
+        if max_color_temp:
+            return int(max_color_temp)
+        return None
 
     @property
     def motion_sensor(self) -> bool:
@@ -896,6 +923,8 @@ class SensemeFan:
                         valuecount = 2
                     elif "NW;PARAMS;ACTUAL" in result:
                         valuecount = 3
+                    elif "DEVICE;LIGHT" in result:
+                        valuecount = len(result.split(";")) - 2
                     # split on ';' and the associate the correct
                     # number of values
                     values = result.split(";")
@@ -912,8 +941,9 @@ class SensemeFan:
                     if self._data.get(key, "?????") == value:
                         # parameter is the same value
                         continue
-                    if key == "WINTERMODE;STATE":
-                        # first update complete when WINTERMODE;STATE is received
+                    if key == "SNSROCC;TIMEOUT;MIN":
+                        # first update complete when SNSROCC;TIMEOUT;MIN is received
+                        # last parameter common to both Haiku Fan and Haiku Light
                         self._first_update = True
                     self._data[key] = value
                     _LOGGER.debug(
@@ -926,7 +956,7 @@ class SensemeFan:
                         self._fw_version = value
                     elif key == "DEVICE;LIGHT":
                         value = value.upper()
-                        self._has_light = value == "PRESENT"
+                        self._has_light = value in ("PRESENT", "PRESENT;COLOR")
                     elif key == "GROUP;LIST":
                         self._room_name = value
                     self._execute_callbacks()
