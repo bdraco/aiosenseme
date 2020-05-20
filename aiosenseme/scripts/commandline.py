@@ -59,7 +59,7 @@ ARGS.add_argument(
     help="SenseME device name, room name or IP address",
 )
 ARGS.add_argument(
-    "-p",
+    "-f",
     "--fan",
     action="store",
     dest="fan",
@@ -130,6 +130,8 @@ def print_device(device: SensemeFan):
             msg += f"  Model: {device.model} with light, "
         else:
             msg += f"  Model: {device.model} without light, "
+    elif device.is_light:
+        msg += f"  Model: {device.model}, "
     else:
         msg += f"  Model: {device.model}, "
     msg += f"FW Version: {device.fw_version}\n"
@@ -145,9 +147,9 @@ def print_state(prefix: str, device: SensemeFan):
         if device.fan_on:
             msg += f": Fan is on (speed: {device.fan_speed}"
             if device.fan_whoosh:
-                msg += ", Whoosh: on)"
+                msg += ", whoosh: on)"
             else:
-                msg += ", Whoosh: off)"
+                msg += ", whoosh: off)"
         else:
             msg += ": Fan is off"
         if device.light_on:
@@ -192,7 +194,8 @@ async def process_args():
             "of the GNU General Public License <http://www.gnu.org/licenses/gpl.html>."
         )
         print("There is NO WARRANTY, to the extent permitted by law.")
-    elif args.listen is not None:
+        return
+    if args.listen is not None:
         # Force debugging on
         logging.basicConfig(level=logging.DEBUG)
         device = await aiosenseme.discover(args.listen, 5)
@@ -201,8 +204,7 @@ async def process_args():
             return
         while True:
             await asyncio.sleep(4)
-
-    elif args.discover is True:
+    if args.discover is True:
         try:
             discovery = SensemeDiscovery(True, 1)
             discovery.add_callback(discovered)
@@ -210,7 +212,8 @@ async def process_args():
             await asyncio.sleep(4)
         finally:
             discovery.stop()
-    elif args.models is True:
+        return
+    if args.models is True:
         msg = "Known SenseME models: "
         first = True
         for model in SensemeFan.models():
@@ -221,61 +224,38 @@ async def process_args():
                 msg += ", " + model
         print(msg)
         return
-    else:
-        if args.name is None:
-            print("You must specify a SenseME device name using -n or --name")
-            return
-        device = await aiosenseme.discover(args.name, 2)
-        if device is None:
-            print(f"Name/Room/IP address '{args.name}' not found")
-            return
-        print_device(device)
-        print_state("State", device)
-        changed = False
-        try:
-            if device.is_fan:
-                if args.whoosh is not None:
-                    print(f"whoosh={args.whoosh}")
-                    if device.fan_whoosh != (args.whoosh == "on"):
-                        changed = True
-                    device.fan_whoosh = args.whoosh == "on"
-                if args.speed is not None:
-                    if args.fan is not None:
-                        print(
-                            "When specifying --fanspeed there is no "
-                            "reason to set --fan"
-                        )
-                    if device.fan_speed != args.speed:
-                        changed = True
-                    device.fan_speed = args.speed
-                elif args.fan is not None:
-                    if device.fan_on != (args.fan == "on"):
-                        changed = True
-                    device.fan_on = args.fan == "on"
-                if device.has_light:
-                    if args.colortemp is not None:
-                        print("Fan lights do not have adjustable color temperature")
-                    if args.brightness is not None:
-                        if args.light is not None:
-                            print(
-                                "When specifying --brightness there is no "
-                                "reason to set --light"
-                            )
-                        if device.light_brightness != args.brightness:
-                            changed = True
-                        device.light_brightness = args.brightness
-                    elif args.light is not None:
-                        if device.light_on != (args.light == "on"):
-                            changed = True
-                        device.light_on = args.light == "on"
-                else:
-                    if (
-                        args.brightness is not None
-                        or args.light is not None
-                        or args.colortemp is not None
-                    ):
-                        print("Fan does not have a light to adjust")
-            else:
+    if args.name is None:
+        print("You must specify a SenseME device name using -n or --name")
+        return
+    device = await aiosenseme.discover(args.name, 2)
+    if device is None:
+        print(f"Name/Room/IP address '{args.name}' not found")
+        return
+    print_device(device)
+    print_state("State", device)
+    changed = False
+    try:
+        if device.is_fan:
+            if args.whoosh is not None:
+                print(f"whoosh={args.whoosh}")
+                if device.fan_whoosh != (args.whoosh == "on"):
+                    changed = True
+                device.fan_whoosh = args.whoosh == "on"
+            if args.speed is not None:
+                if args.fan is not None:
+                    print(
+                        "When specifying --fanspeed there is no " "reason to set --fan"
+                    )
+                if device.fan_speed != args.speed:
+                    changed = True
+                device.fan_speed = args.speed
+            elif args.fan is not None:
+                if device.fan_on != (args.fan == "on"):
+                    changed = True
+                device.fan_on = args.fan == "on"
+            if device.has_light:
+                if args.colortemp is not None:
+                    print("Fan lights do not have adjustable color temperature")
                 if args.brightness is not None:
                     if args.light is not None:
                         print(
@@ -289,16 +269,37 @@ async def process_args():
                     if device.light_on != (args.light == "on"):
                         changed = True
                     device.light_on = args.light == "on"
-                if args.colortemp is not None:
-                    args.brightness = int(round(args.brightness / 100.0)) * 100
-                    if device.colortemp != args.brightness:
-                        changed = True
-                    device.colortemp = args.brightness
-            if changed:
-                await asyncio.sleep(0.5)
-                print_state("New State", device)
-        finally:
-            device.stop()
+            else:
+                if (
+                    args.brightness is not None
+                    or args.light is not None
+                    or args.colortemp is not None
+                ):
+                    print("Fan does not have a light to adjust")
+        else:
+            if args.brightness is not None:
+                if args.light is not None:
+                    print(
+                        "When specifying --brightness there is no "
+                        "reason to set --light"
+                    )
+                if device.light_brightness != args.brightness:
+                    changed = True
+                device.light_brightness = args.brightness
+            elif args.light is not None:
+                if device.light_on != (args.light == "on"):
+                    changed = True
+                device.light_on = args.light == "on"
+            if args.colortemp is not None:
+                args.colortemp = int(round(args.colortemp / 100.0)) * 100
+                if device.colortemp != args.colortemp:
+                    changed = True
+                device.colortemp = args.colortemp
+        if changed:
+            await asyncio.sleep(0.5)
+            print_state("New State", device)
+    finally:
+        device.stop()
 
 
 def cli():

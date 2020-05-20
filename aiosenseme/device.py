@@ -62,11 +62,18 @@ ROOM_TYPES = [
     "Mudroom",  # 28
 ]
 
-FAN_MODEL_TYPES = {
+DEVICE_MODELS = {
     "FAN,HAIKU,SENSEME": "Haiku Fan",
     "FAN,HAIKU,HSERIES": "Haiku Fan",  # H Series is now called plain Haiku
     "FAN,LSERIES": "Haiku L Fan",
-    "LIGHT,HAIKU;": "Haiku Light",
+    "LIGHT,HAIKU": "Haiku Light",
+}
+
+DEVICE_TYPES = {
+    "FAN,HAIKU,SENSEME": "FAN",
+    "FAN,HAIKU,HSERIES": "FAN",
+    "FAN,LSERIES": "FAN",
+    "LIGHT,HAIKU": "LIGHT",
 }
 
 
@@ -150,8 +157,8 @@ class SensemeProtocol(asyncio.Protocol):
         return False  # tell the transport to close itself
 
 
-class SensemeFan:
-    """SensemeFan Class."""
+class SensemeDevice:
+    """SensemeDevice base class."""
 
     def __init__(
         self,
@@ -161,7 +168,7 @@ class SensemeFan:
         model: str,
         refresh_minutes: int = 1,
     ):
-        """Initialize SensemeFan Class."""
+        """Initialize SensemeDevice Class."""
         self._name = name
         self.refresh_minutes = refresh_minutes
         self._id = id
@@ -199,20 +206,6 @@ class SensemeFan:
         """Hash magic method."""
         return hash(self._id)
 
-    def __str__(self) -> str:
-        """Return string representation of SensemeFan object."""
-        string = f"Name: {self._name}"
-        if self._room_name is not None:
-            string += f", Room Name: {self._room_name}"
-        string += f", ID: {self._id}"
-        string += f", IP: {self._ip}"
-        string += f", Model: {self.model}"
-        if self._fw_version is not None:
-            string += f", FW Version: {self._fw_version}"
-        if self._has_light is not None:
-            string += f", Has Light: {self._has_light}"
-        return string
-
     @property
     def is_sec_info_complete(self) -> bool:
         """Return if all secondary information is complete."""
@@ -224,10 +217,10 @@ class SensemeFan:
             return False
         return True
 
-    async def _query_fan(
+    async def _query_device(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, cmd: str
     ) -> str:
-        """Send command to SenseME fan and parses response.
+        """Send command to SenseME device and parses response.
 
         None is returned if response was 'ERROR;PARSE'
         """
@@ -251,7 +244,7 @@ class SensemeFan:
                     self._leftover = rsp
                 else:
                     # _LOGGER.debug("Received response: '%s'" ,p)
-                    # remove '(fan name' at the beginning and the ')' at
+                    # remove '(device name' at the beginning and the ')' at
                     # the end of the string
                     _, result = rsp[:-1].split(";", 1)
                     values = result.split(";")
@@ -266,11 +259,11 @@ class SensemeFan:
                             return value
 
     async def fill_out_sec_info(self) -> bool:
-        """Retrieve secondary info from the SenseME fan directly.
+        """Retrieve secondary info from the SenseME device directly.
 
         Secondary data is fw_version, has_light and room_name which can only be
-        filled in after connecting with the fan. The secondary data is also populated
-        when the fan is started and after the fan is connected.
+        filled in after connecting with the device. The secondary data is also populated
+        when the device is started and after the device is connected.
         This method is a coroutine.
         """
         if self.is_sec_info_complete:
@@ -278,18 +271,18 @@ class SensemeFan:
             return True
         try:
             reader, writer = await asyncio.open_connection(self.ip, PORT)
-            self._fw_name = await self._query_fan(reader, writer, "FW;NAME")
-            self._fw_version = await self._query_fan(
+            self._fw_name = await self._query_device(reader, writer, "FW;NAME")
+            self._fw_version = await self._query_device(
                 reader, writer, f"FW;{self._fw_name}"
             )
             self._has_light = (
-                await self._query_fan(reader, writer, "DEVICE;LIGHT")
+                await self._query_device(reader, writer, "DEVICE;LIGHT")
             ).upper() in ("PRESENT", "PRESENT;COLOR")
-            self._room_name = await self._query_fan(reader, writer, "GROUP;LIST")
+            self._room_name = await self._query_device(reader, writer, "GROUP;LIST")
             return True
         except OSError:
             _LOGGER.debug(
-                "%s: Failed to retrieve secondary information from fan\n%s",
+                "%s: Failed to retrieve secondary information from device\n%s",
                 self._name,
                 traceback.format_exc(),
             )
@@ -301,61 +294,56 @@ class SensemeFan:
 
     @property
     def name(self) -> str:
-        """Return name of fan."""
+        """Return name of device."""
         return self._name
 
     @property
     def id(self) -> str:
-        """Return id of fan. Also known as MAC address."""
+        """Return id of device. Also known as MAC address."""
         return self._id
 
     @property
     def mac(self) -> str:
-        """Return MAC address of fan. Also known as id."""
+        """Return MAC address of device. Also known as id."""
         return self._id
 
     @property
     def ip(self) -> str:
-        """Return IP address of fan."""
+        """Return IP address of device."""
         return self._ip
 
     @property
     def connected(self) -> bool:
-        """Return True when fan is connected."""
+        """Return True when device is connected."""
         return self._is_connected
 
     @property
     def model(self) -> str:
-        """Return Model of fan."""
-        return FAN_MODEL_TYPES.get(self._model.upper(), self._model.upper())
+        """Return Model of device."""
+        return DEVICE_MODELS.get(self._model.upper(), self._model.upper())
+
+    @property
+    def device_type(self) -> str:
+        """Return type of device."""
+        return DEVICE_TYPES.get(self._model.upper(), "FAN")
 
     @classmethod
     def models(cls) -> list:
         """Return list of possible model names."""
         no_duplicates = []
-        for model_name in FAN_MODEL_TYPES.values():
+        for model_name in DEVICE_MODELS.values():
             if model_name not in no_duplicates:
                 no_duplicates.append(model_name)
         return no_duplicates
 
     @property
     def fw_version(self) -> str:
-        """Return the version of the firmware running on the SenseME fan."""
+        """Return the version of the firmware running on the SenseME device."""
         return self._fw_version
 
     @property
-    def is_fan(self) -> str:
-        """Return True if the device is a fan."""
-        return self.model != "Haiku Light"
-
-    @property
-    def is_light(self) -> str:
-        """Return True if the device is a standalone light."""
-        return self.model == "Haiku Light"
-
-    @property
     def has_light(self) -> bool:
-        """Return True if the fan has an installed light."""
+        """Return True if the device has an installed light."""
         return self._has_light
 
     @property
@@ -402,7 +390,7 @@ class SensemeFan:
 
     @property
     def network_dhcp_on(self) -> bool:
-        """Return the fan local DHCP service running state."""
+        """Return the device local DHCP service running state."""
         dhcp = self._data.get("NW;DHCP", None)
         if dhcp:
             return dhcp == "ON"
@@ -410,10 +398,10 @@ class SensemeFan:
 
     @property
     def network_ip(self) -> str:
-        """Return the network IP address of the fan.
+        """Return the network IP address of the device.
 
-        This IP address is reported by the SenseME fan and not necessarily the same IP
-        address used to connect with the fan.
+        This IP address is reported by the SenseME device and not necessarily the same IP
+        address used to connect with the device.
         """
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
         if addresses:
@@ -423,7 +411,7 @@ class SensemeFan:
 
     @property
     def network_gateway(self) -> str:
-        """Return the network gateway address of the fan."""
+        """Return the network gateway address of the device."""
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
         if addresses:
             addresses = addresses.split(";")
@@ -432,7 +420,7 @@ class SensemeFan:
 
     @property
     def network_subnetmask(self) -> str:
-        """Return the network gateway address of the fan."""
+        """Return the network gateway address of the device."""
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
         if addresses:
             addresses = addresses.split(";")
@@ -441,17 +429,17 @@ class SensemeFan:
 
     @property
     def network_ssid(self) -> str:
-        """Return the wireless SSID the fan is connected to."""
+        """Return the wireless SSID the device is connected to."""
         return self._data.get("NW;SSID", None)
 
     @property
     def network_token(self) -> str:
-        """Return the network token of the fan."""
+        """Return the network token of the device."""
         return self._data.get("NW;TOKEN", None)
 
     @property
     def room_status(self) -> bool:
-        """Return True if the fan is in a room."""
+        """Return True if the device is in a room."""
         room_name = self._data.get("GROUP;LIST", None)
         room_type = self._data.get("GROUP;ROOM;TYPE", None)
         if room_name and room_type:
@@ -460,7 +448,7 @@ class SensemeFan:
 
     @property
     def room_name(self) -> str:
-        """Return the room name of the fan.
+        """Return the room name of the device.
 
         'EMPTY' is returned if not in a group.
         """
@@ -468,13 +456,343 @@ class SensemeFan:
 
     @property
     def room_type(self) -> str:
-        """Return the room type of the fan."""
+        """Return the room type of the device."""
         room_type = int(self._data.get("GROUP;ROOM;TYPE", None))
         if room_type:
             if room_type >= len(ROOM_TYPES):
                 room_type = 0
             return ROOM_TYPES[room_type]
         return None
+
+    @property
+    def light_on(self) -> bool:
+        """Return True when light is on at any brightness."""
+        state = self._data.get("LIGHT;PWR", None)
+        if state:
+            return state == "ON"
+        return None
+
+    @light_on.setter
+    def light_on(self, state: bool):
+        """Set the light power state."""
+        value = "ON" if state else "OFF"
+        self._send_command(f"LIGHT;PWR;{value}")
+
+    @property
+    def light_brightness(self) -> int:
+        """Return the light brightness."""
+        level = self._data.get("LIGHT;LEVEL;ACTUAL", None)
+        if level:
+            return int(level)
+        return None
+
+    @light_brightness.setter
+    def light_brightness(self, level: int):
+        """Set the light brightness."""
+        if level < 0:
+            level = 0
+        if level > 16:
+            level = 16
+        self._send_command(f"LIGHT;LEVEL;SET;{level}")
+
+    @property
+    def light_brightness_min(self) -> int:
+        """Return the light brightness minimum."""
+        min_brightness = self._data.get("LIGHT;LEVEL;MIN", None)
+        if min_brightness:
+            return int(min_brightness)
+        return None
+
+    @property
+    def light_brightness_max(self) -> int:
+        """Return the light brightness maximum."""
+        max_brightness = self._data.get("LIGHT;LEVEL;MAX", None)
+        if max_brightness:
+            return int(max_brightness)
+        return None
+
+    @property
+    def light_brightness_limits_room(self) -> Tuple:
+        """Return a tuple of the min and max light brightness for the room.
+
+        A room can limit the minimum/maximum light brightness while keeping the same
+        number of light brightness levels. On the Haiku by BAF application this setting
+        can be found by clicking the room info button. You have to have at least one
+        fan with installed light added to a room.
+        """
+        raw = self._data.get("LIGHT;BOOKENDS", None)
+        if raw is None:
+            return None
+        values = raw.split(";")
+        if len(values) != 2:
+            return None
+        min_bright = int(values[0])
+        max_bright = int(values[1])
+        return min_bright, max_bright
+
+    @property
+    def motion_sensor(self) -> bool:
+        """Return True when device motion sensor says room is occupied.
+
+        Available on all SenseME fans.
+        """
+        status = self._data.get("SNSROCC;STATUS", None)
+        if status:
+            return status == "OCCUPIED"
+        return None
+
+    def add_callback(self, callback: Callable):
+        """Add callback function/coroutine. Called when parameters are updated."""
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
+            if inspect.iscoroutinefunction(callback):
+                _LOGGER.debug("%s: Added coroutine callback", self._name)
+            else:
+                _LOGGER.debug("%s: Added function callback", self._name)
+
+    def remove_callback(self, callback):
+        """Remove existing callback function/coroutine."""
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+            _LOGGER.debug("%s: Removed callback", self._name)
+
+    async def update(self) -> bool:
+        """Wait for first update of all parameters in SenseME device.
+
+        This method is a coroutine.
+        """
+        if self._first_update:
+            return True
+        if self._is_running is False:
+            self.start()
+        start = int(time.time())
+        while not self._first_update:
+            await asyncio.sleep(0.01)
+            if int(time.time()) - start >= 5:
+                return False
+        return True
+
+    def _execute_callbacks(self):
+        """Run all callbacks to indicate something has changed."""
+        for callback in self._callbacks:
+            if inspect.iscoroutinefunction(callback):
+                loop = asyncio.get_event_loop()
+                loop.create_task(callback())
+            else:
+                callback()
+
+    def _send_command(self, cmd):
+        """Send a command to SenseME device."""
+        msg = f"<{self._name};{cmd}>"
+        self._endpoint.send(msg)
+        # _LOGGER.debug("%s: Command sent '%s'", self._name, cmd)
+
+    def _update_status(self):
+        """Issues commands to get complete status from device."""
+        _LOGGER.debug("%s: Status update", self._name)
+        self._send_command("GETALL")
+        # GETALL doesn't return the status of the motion detector,
+        # so also request the motion detector status
+        self._send_command("SNSROCC;STATUS;GET")
+
+    async def _updater(self):
+        """Periodically update device parameters.
+
+        This method is a coroutine.
+        """
+        while True:
+            try:
+                self._update_status()
+                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
+            except asyncio.CancelledError:
+                _LOGGER.debug("%s: Updater task cancelled", self._name)
+                return
+            except OSError:
+                _LOGGER.debug(
+                    "%s: Updater task error\n%s", self._name, traceback.format_exc()
+                )
+                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
+            except Exception:
+                _LOGGER.error(
+                    "%s: Unhandled updater task error\n%s",
+                    self._name,
+                    traceback.format_exc(),
+                )
+                await asyncio.sleep(10)
+                raise
+        _LOGGER.error("%s: Updater task ended", self._name)
+
+    async def _listener(self):
+        """Task that listens for device status changes.
+
+        This method is a coroutine.
+        """
+        while True:
+            try:
+                if self._error_count > 10:
+                    _LOGGER.error("%s: Listener task too many errors", self._name)
+                    self._is_connected = False
+                    self._execute_callbacks()
+                    self._updater_task.cancel()
+                    if self._endpoint is not None:
+                        self._endpoint.close()
+                    self._endpoint = None
+                    break
+                if self._endpoint is None:
+                    self._is_connected = False
+                    self._execute_callbacks()
+                    self._endpoint = SensemeEndpoint()
+                    loop = asyncio.get_event_loop()
+                    try:
+                        _LOGGER.debug("%s: Connecting", self._name)
+                        await loop.create_connection(
+                            lambda: SensemeProtocol(self._name, self._endpoint),
+                            self._ip,
+                            PORT,
+                        )
+                    except OSError:
+                        _LOGGER.debug(
+                            "%s: Connect failed, " "try again in a minute\n%s",
+                            self._name,
+                            traceback.format_exc(),
+                        )
+                        self._endpoint = None
+                        await asyncio.sleep(60)
+                        continue
+                    self._updater_task = loop.create_task(self._updater())
+                    self._error_count = 0
+                    self._is_connected = True
+                    self._execute_callbacks()
+                data = await self._endpoint.receive()
+                if data is None:
+                    # endpoint is closed, let task know it's time open another
+                    _LOGGER.warning("%s: Connection lost", self._name)
+                    self._is_connected = False
+                    self._execute_callbacks()  # tell callbacks we disconnected
+                    self._endpoint = None
+                    self._updater_task.cancel()
+                    await asyncio.sleep(1)
+                    continue
+                # add previous partial data to new data
+                data = self._leftover + data
+                self._leftover = ""
+                # The data received may have multiple parenthesized data
+                # points. Split them and put each individual message onto the
+                # queue. Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
+                # then split on the '|'
+                for msg in data.replace(")(", ")|(").split("|"):
+                    if msg[-1] != ")":
+                        self._leftover = msg
+                        continue
+                    # remove '(device name' at the beginning and the ')'
+                    # at the end of the string
+                    _, result = msg[:-1].split(";", 1)
+                    # most messages have only one value at the end
+                    valuecount = 1
+                    if "BOOKENDS" in result:
+                        valuecount = 2
+                    elif "NW;PARAMS;ACTUAL" in result:
+                        valuecount = 3
+                    elif "DEVICE;LIGHT" in result:
+                        valuecount = len(result.split(";")) - 2
+                    # split on ';' and the associate the correct
+                    # number of values
+                    values = result.split(";")
+                    key = ";".join(values[:-valuecount])
+                    value = ";".join(values[-valuecount:])
+                    if key == "ERROR":
+                        _LOGGER.error(
+                            "%s: Command error response: '%s'", self._name, value,
+                        )
+                        continue
+                    if key == "TIME;VALUE":
+                        # ignore time parameter
+                        continue
+                    if self._data.get(key, "?????") == value:
+                        # parameter is the same value
+                        continue
+                    if key == "SNSROCC;TIMEOUT;MIN":
+                        # first update complete when SNSROCC;TIMEOUT;MIN is received
+                        # last parameter common to both Haiku Fan and Haiku Light
+                        self._first_update = True
+                    self._data[key] = value
+                    _LOGGER.debug(
+                        "%s: Param updated: [%s]='%s'", self._name, key, value,
+                    )
+                    # update certain local variables that are not part of data
+                    if key == "FW;NAME":
+                        self._fw_name = value
+                    elif key == ("FW;" + self._fw_name):
+                        self._fw_version = value
+                    elif key == "DEVICE;LIGHT":
+                        value = value.upper()
+                        self._has_light = value in ("PRESENT", "PRESENT;COLOR")
+                    elif key == "GROUP;LIST":
+                        self._room_name = value
+                    self._execute_callbacks()
+            except asyncio.CancelledError:
+                _LOGGER.debug("%s: Listener task cancelled", self._name)
+                return
+            except OSError:
+                _LOGGER.debug(
+                    "%s: Listener task\n%s", self._name, traceback.format_exc()
+                )
+                self._error_count += 1
+                await asyncio.sleep(1)
+            except Exception:
+                _LOGGER.error(
+                    "%s: Listener task error\n%s", self._name, traceback.format_exc()
+                )
+                raise
+        _LOGGER.error("%s: Listener task ended", self._name)
+
+    def start(self):
+        """Start the async task to handle responses from the device."""
+        if not self._is_running:
+            loop = asyncio.get_event_loop()
+            self._listener_task = loop.create_task(self._listener())
+            self._is_running = True
+            _LOGGER.debug("%s: Started", self._name)
+
+    def stop(self):
+        """Signals thread to stop and returns immediately."""
+        if self._is_running is True:
+            self._listener_task.cancel()
+            self._updater_task.cancel()
+            self._is_running = False
+
+
+class SensemeFan(SensemeDevice):
+    """SensemeFan Class."""
+
+    def __str__(self) -> str:
+        """Return string representation of SensemeFan object."""
+        string = f"Name: {self._name}"
+        if self._room_name is not None:
+            string += f", Room Name: {self._room_name}"
+        string += f", ID: {self._id}"
+        string += f", IP: {self._ip}"
+        string += f", Model: {self.model}"
+        if self._fw_version is not None:
+            string += f", FW Version: {self._fw_version}"
+        if self._has_light is not None:
+            string += f", Has Light: {self._has_light}"
+        return string
+
+    @property
+    def is_fan(self) -> str:
+        """Return True if this device is a fan."""
+        return True
+
+    @property
+    def is_light(self) -> str:
+        """Return True if the device is a standalone light."""
+        return False
+
+    @property
+    def has_light(self) -> bool:
+        """Return True if the fan has an installed light."""
+        return self._has_light
 
     @property
     def fan_on(self) -> bool:
@@ -633,117 +951,6 @@ class SensemeFan:
         self._send_command(f"LEARN;ZEROTEMP;SET;{temp}")
 
     @property
-    def light_on(self) -> bool:
-        """Return True when light is on at any brightness."""
-        state = self._data.get("LIGHT;PWR", None)
-        if state:
-            return state == "ON"
-        return None
-
-    @light_on.setter
-    def light_on(self, state: bool):
-        """Set the light power state."""
-        value = "ON" if state else "OFF"
-        self._send_command(f"LIGHT;PWR;{value}")
-
-    @property
-    def light_brightness(self) -> int:
-        """Return the light brightness."""
-        level = self._data.get("LIGHT;LEVEL;ACTUAL", None)
-        if level:
-            return int(level)
-        return None
-
-    @light_brightness.setter
-    def light_brightness(self, level: int):
-        """Set the light brightness."""
-        if level < 0:
-            level = 0
-        if level > 16:
-            level = 16
-        self._send_command(f"LIGHT;LEVEL;SET;{level}")
-
-    @property
-    def light_brightness_min(self) -> int:
-        """Return the light brightness minimum."""
-        min_brightness = self._data.get("LIGHT;LEVEL;MIN", None)
-        if min_brightness:
-            return int(min_brightness)
-        return None
-
-    @property
-    def light_brightness_max(self) -> int:
-        """Return the light brightness maximum."""
-        max_brightness = self._data.get("LIGHT;LEVEL;MAX", None)
-        if max_brightness:
-            return int(max_brightness)
-        return None
-
-    @property
-    def light_brightness_limits_room(self) -> Tuple:
-        """Return a tuple of the min and max light brightness for the room.
-
-        A room can limit the minimum/maximum light brightness while keeping the same
-        number of light brightness levels. On the Haiku by BAF application this setting
-        can be found by clicking the room info button. You have to have at least one
-        fan with installed light added to a room.
-        """
-        raw = self._data.get("LIGHT;BOOKENDS", None)
-        if raw is None:
-            return None
-        values = raw.split(";")
-        if len(values) != 2:
-            return None
-        min_bright = int(values[0])
-        max_bright = int(values[1])
-        return min_bright, max_bright
-
-    @property
-    def light_colortemp(self) -> int:
-        """Return the light color temperature."""
-        level = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
-        if level:
-            return int(level)
-        return None
-
-    @light_colortemp.setter
-    def light_colortemp(self, color_temp: int):
-        """Set the light color temperature."""
-        if color_temp < self.light_colortemp_min:
-            color_temp = self.light_colortemp_min
-        if color_temp > self.light_colortemp_max:
-            color_temp = self.light_colortemp_max
-        color_temp = int(round(color_temp / 100.0)) * 100
-        self._send_command(f"LIGHT;COLOR;TEMP;SET;{color_temp}")
-
-    @property
-    def light_colortemp_min(self) -> int:
-        """Return the light color temperature minimum."""
-        min_color_temp = self._data.get("LIGHT;COLOR;TEMP;MIN", None)
-        if min_color_temp:
-            return int(min_color_temp)
-        return None
-
-    @property
-    def light_colortemp_max(self) -> int:
-        """Return the light color temperature maximum."""
-        max_color_temp = self._data.get("LIGHT;COLOR;TEMP;MAX", None)
-        if max_color_temp:
-            return int(max_color_temp)
-        return None
-
-    @property
-    def motion_sensor(self) -> bool:
-        """Return True when fan motion sensor says room is occupied.
-
-        Available on all SenseME fans.
-        """
-        status = self._data.get("SNSROCC;STATUS", None)
-        if status:
-            return status == "OCCUPIED"
-        return None
-
-    @property
     def motion_fan_auto(self) -> bool:
         """Return True when fan is in automatic on with motion mode."""
         state = self._data.get("FAN;AUTO", None)
@@ -771,222 +978,68 @@ class SensemeFan:
         state = "ON" if state else "OFF"
         self._send_command(f";LIGHT;AUTO;{state}")
 
-    def add_callback(self, callback: Callable):
-        """Add callback function/coroutine. Called when parameters are updated."""
-        if callback not in self._callbacks:
-            self._callbacks.append(callback)
-            if inspect.iscoroutinefunction(callback):
-                _LOGGER.debug("%s: Added coroutine callback", self._name)
-            else:
-                _LOGGER.debug("%s: Added function callback", self._name)
 
-    def remove_callback(self, callback):
-        """Remove existing callback function/coroutine."""
-        if callback in self._callbacks:
-            self._callbacks.remove(callback)
-            _LOGGER.debug("%s: Removed callback", self._name)
+class SensemeLight(SensemeDevice):
+    """SensemeLight Class."""
 
-    async def update(self) -> bool:
-        """Wait for first update of all parameters in SenseME fan.
+    def __str__(self) -> str:
+        """Return string representation of SensemeFan object."""
+        string = f"Name: {self._name}"
+        if self._room_name is not None:
+            string += f", Room Name: {self._room_name}"
+        string += f", ID: {self._id}"
+        string += f", IP: {self._ip}"
+        string += f", Model: {self.model}"
+        if self._fw_version is not None:
+            string += f", FW Version: {self._fw_version}"
 
-        This method is a coroutine.
-        """
-        if self._first_update:
-            return True
-        if self._is_running is False:
-            self.start()
-        start = int(time.time())
-        while not self._first_update:
-            await asyncio.sleep(0.01)
-            if int(time.time()) - start >= 5:
-                return False
+        return string
+
+    @property
+    def is_fan(self) -> str:
+        """Return True if this device is a fan."""
+        return False
+
+    @property
+    def is_light(self) -> str:
+        """Return True if the device is a standalone light."""
         return True
 
-    def _execute_callbacks(self):
-        """Run all callbacks to indicate something has changed."""
-        for callback in self._callbacks:
-            if inspect.iscoroutinefunction(callback):
-                loop = asyncio.get_event_loop()
-                loop.create_task(callback())
-            else:
-                callback()
+    @property
+    def has_light(self) -> bool:
+        """Return True if the fan has an installed light."""
+        return True
 
-    def _send_command(self, cmd):
-        """Send a command to SenseME fan."""
-        msg = f"<{self._name};{cmd}>"
-        self._endpoint.send(msg)
-        # _LOGGER.debug("%s: Command sent '%s'", self._name, cmd)
+    @property
+    def light_colortemp(self) -> int:
+        """Return the light color temperature."""
+        level = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
+        if level:
+            return int(level)
+        return None
 
-    def _update_status(self):
-        """Issues commands to get complete status from fan."""
-        _LOGGER.debug("%s: Status update", self._name)
-        self._send_command("GETALL")
-        # GETALL doesn't return the status of the motion detector,
-        # so also request the motion detector status
-        self._send_command("SNSROCC;STATUS;GET")
+    @light_colortemp.setter
+    def light_colortemp(self, color_temp: int):
+        """Set the light color temperature."""
+        if color_temp < self.light_colortemp_min:
+            color_temp = self.light_colortemp_min
+        if color_temp > self.light_colortemp_max:
+            color_temp = self.light_colortemp_max
+        color_temp = int(round(color_temp / 100.0)) * 100
+        self._send_command(f"LIGHT;COLOR;TEMP;VALUE;SET;{color_temp}")
 
-    async def _updater(self):
-        """Periodically update fan parameters.
+    @property
+    def light_colortemp_min(self) -> int:
+        """Return the light color temperature minimum."""
+        min_color_temp = self._data.get("LIGHT;COLOR;TEMP;MIN", None)
+        if min_color_temp:
+            return int(min_color_temp)
+        return None
 
-        This method is a coroutine.
-        """
-        while True:
-            try:
-                self._update_status()
-                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
-            except asyncio.CancelledError:
-                _LOGGER.debug("%s: Updater task cancelled", self._name)
-                return
-            except OSError:
-                _LOGGER.debug(
-                    "%s: Updater task error\n%s", self._name, traceback.format_exc()
-                )
-                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
-            except Exception:
-                _LOGGER.error(
-                    "%s: Unhandled updater task error\n%s",
-                    self._name,
-                    traceback.format_exc(),
-                )
-                await asyncio.sleep(10)
-                raise
-        _LOGGER.error("%s: Updater task ended", self._name)
-
-    async def _listener(self):
-        """Task that listens for fan status changes.
-
-        This method is a coroutine.
-        """
-        while True:
-            try:
-                if self._error_count > 10:
-                    _LOGGER.error("%s: Listener task too many errors", self._name)
-                    self._is_connected = False
-                    self._execute_callbacks()
-                    self._updater_task.cancel()
-                    if self._endpoint is not None:
-                        self._endpoint.close()
-                    self._endpoint = None
-                    break
-                if self._endpoint is None:
-                    self._is_connected = False
-                    self._execute_callbacks()
-                    self._endpoint = SensemeEndpoint()
-                    loop = asyncio.get_event_loop()
-                    try:
-                        _LOGGER.debug("%s: Connecting", self._name)
-                        await loop.create_connection(
-                            lambda: SensemeProtocol(self._name, self._endpoint),
-                            self._ip,
-                            PORT,
-                        )
-                    except OSError:
-                        _LOGGER.debug(
-                            "%s: Connect failed, " "try again in a minute\n%s",
-                            self._name,
-                            traceback.format_exc(),
-                        )
-                        self._endpoint = None
-                        await asyncio.sleep(60)
-                        continue
-                    self._updater_task = loop.create_task(self._updater())
-                    self._error_count = 0
-                    self._is_connected = True
-                    self._execute_callbacks()
-                data = await self._endpoint.receive()
-                if data is None:
-                    # endpoint is closed, let task know it's time open another
-                    _LOGGER.warning("%s: Connection lost", self._name)
-                    self._is_connected = False
-                    self._execute_callbacks()  # tell callbacks we disconnected
-                    self._endpoint = None
-                    self._updater_task.cancel()
-                    await asyncio.sleep(1)
-                    continue
-                # add previous partial data to new data
-                data = self._leftover + data
-                self._leftover = ""
-                # The data received may have multiple parenthesized data
-                # points. Split them and put each individual message onto the
-                # queue. Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
-                # then split on the '|'
-                for msg in data.replace(")(", ")|(").split("|"):
-                    if msg[-1] != ")":
-                        self._leftover = msg
-                        continue
-                    # remove '(fan name' at the beginning and the ')'
-                    # at the end of the string
-                    _, result = msg[:-1].split(";", 1)
-                    # most messages have only one value at the end
-                    valuecount = 1
-                    if "BOOKENDS" in result:
-                        valuecount = 2
-                    elif "NW;PARAMS;ACTUAL" in result:
-                        valuecount = 3
-                    elif "DEVICE;LIGHT" in result:
-                        valuecount = len(result.split(";")) - 2
-                    # split on ';' and the associate the correct
-                    # number of values
-                    values = result.split(";")
-                    key = ";".join(values[:-valuecount])
-                    value = ";".join(values[-valuecount:])
-                    if key == "ERROR":
-                        _LOGGER.error(
-                            "%s: Command error response: '%s'", self._name, value,
-                        )
-                        continue
-                    if key == "TIME;VALUE":
-                        # ignore time parameter
-                        continue
-                    if self._data.get(key, "?????") == value:
-                        # parameter is the same value
-                        continue
-                    if key == "SNSROCC;TIMEOUT;MIN":
-                        # first update complete when SNSROCC;TIMEOUT;MIN is received
-                        # last parameter common to both Haiku Fan and Haiku Light
-                        self._first_update = True
-                    self._data[key] = value
-                    _LOGGER.debug(
-                        "%s: Param updated: [%s]='%s'", self._name, key, value,
-                    )
-                    # update certain local variables that are not part of data
-                    if key == "FW;NAME":
-                        self._fw_name = value
-                    elif key == ("FW;" + self._fw_name):
-                        self._fw_version = value
-                    elif key == "DEVICE;LIGHT":
-                        value = value.upper()
-                        self._has_light = value in ("PRESENT", "PRESENT;COLOR")
-                    elif key == "GROUP;LIST":
-                        self._room_name = value
-                    self._execute_callbacks()
-            except asyncio.CancelledError:
-                _LOGGER.debug("%s: Listener task cancelled", self._name)
-                return
-            except OSError:
-                _LOGGER.debug(
-                    "%s: Listener task\n%s", self._name, traceback.format_exc()
-                )
-                self._error_count += 1
-                await asyncio.sleep(1)
-            except Exception:
-                _LOGGER.error(
-                    "%s: Listener task error\n%s", self._name, traceback.format_exc()
-                )
-                raise
-        _LOGGER.error("%s: Listener task ended", self._name)
-
-    def start(self):
-        """Start the async task to handle responses from the fan."""
-        if not self._is_running:
-            loop = asyncio.get_event_loop()
-            self._listener_task = loop.create_task(self._listener())
-            self._is_running = True
-            _LOGGER.debug("%s: Started", self._name)
-
-    def stop(self):
-        """Signals thread to stop and returns immediately."""
-        if self._is_running is True:
-            self._listener_task.cancel()
-            self._updater_task.cancel()
-            self._is_running = False
+    @property
+    def light_colortemp_max(self) -> int:
+        """Return the light color temperature maximum."""
+        max_color_temp = self._data.get("LIGHT;COLOR;TEMP;MAX", None)
+        if max_color_temp:
+            return int(max_color_temp)
+        return None

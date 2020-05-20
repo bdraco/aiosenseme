@@ -21,7 +21,7 @@ import traceback
 
 import ifaddr
 
-from .fan import SensemeFan
+from .device import DEVICE_TYPES, SensemeDevice, SensemeFan, SensemeLight
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class SensemeDiscoveryEndpoint:
             return True  # opened connection but no transport is closed
         return self.transport.is_closing()
 
-    async def receive(self) -> SensemeFan:
+    async def receive(self) -> SensemeDevice:
         """Wait for discovered device and return it.
 
         Return None when the socket is closed.
@@ -96,7 +96,15 @@ class SensemeDiscoveryEndpoint:
                 _LOGGER.debug("Ignored Wall Switch '%s' on %s", msg, self.ip)
                 continue
             _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
-            device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
+            device_type = DEVICE_TYPES.get(msg_data[4], "FAN")
+            if device_type == "FAN":
+                device = SensemeFan(
+                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                )
+            elif device_type == "LIGHT":
+                device = SensemeLight(
+                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                )
             return device
 
     def send_broadcast(self):
