@@ -6,7 +6,7 @@ import logging
 from typing import List
 
 import aiosenseme
-from aiosenseme import SensemeDiscovery, SensemeFan
+from aiosenseme import SensemeDiscovery, SensemeDevice
 from aiosenseme import __version__
 
 ARGS = argparse.ArgumentParser(
@@ -120,7 +120,7 @@ ARGS.add_argument(
 _DEVICES = []
 
 
-def print_device(device: SensemeFan):
+def print_device(device: SensemeDevice):
     """Print information about a device."""
     msg = f"{device.name}\n"
     if device.room_status:
@@ -140,7 +140,7 @@ def print_device(device: SensemeFan):
     print(msg)
 
 
-def print_state(prefix: str, device: SensemeFan):
+def print_state(prefix: str, device: SensemeDevice):
     """Print information about a devices's current state."""
     msg = prefix
     if device.is_fan:
@@ -166,7 +166,7 @@ def print_state(prefix: str, device: SensemeFan):
     print(msg)
 
 
-async def discovered(devices: List[SensemeFan]):
+async def discovered(devices: List[SensemeDevice]):
     """Discovered SenseME device callback function.
 
     Called when discovery has detected a SenseME device.
@@ -216,7 +216,7 @@ async def process_args():
     if args.models is True:
         msg = "Known SenseME models: "
         first = True
-        for model in SensemeFan.models():
+        for model in SensemeDevice.models():
             if first:
                 first = False
                 msg += model

@@ -2,7 +2,8 @@
 
 ## v0.4.0
 
-* Testing of standalone Haiku Light.
+* Now supports standalone Haiku Light. Thanks to [PenitentTangent2401](https://github.com/PenitentTangent2401) for help in testing and debugging these changes.
+* Add --listen option to commandline. This will open a connection to specified device name or IP address and show status information as the fans sends it.
 
 ## v0.3.3
 

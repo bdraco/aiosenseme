@@ -182,7 +182,6 @@ class SensemeDevice:
             self._has_sensor = True
         else:
             self._has_sensor = False
-        self._has_sensor = None
         self._is_running = False
         self._is_connected = False
         self._data = dict()
@@ -217,8 +216,6 @@ class SensemeDevice:
         if self._fw_version is None:
             return False
         if self._has_light is None:
-            return False
-        if self._has_sensor is None:
             return False
         if self._room_name is None:
             return False
@@ -300,6 +297,16 @@ class SensemeDevice:
             await writer.wait_closed()
 
     @property
+    def is_fan(self) -> str:
+        """Return True if this device is a fan."""
+        return False
+
+    @property
+    def is_light(self) -> str:
+        """Return True if the device is a standalone light."""
+        return False
+
+    @property
     def name(self) -> str:
         """Return name of device."""
         return self._name
@@ -344,9 +351,9 @@ class SensemeDevice:
         return no_duplicates
 
     @property
-    def is_unknown_model(self) -> str:
+    def is_unknown_model(self) -> bool:
         """Return True if the model is unknown."""
-        return not (DEVICE_MODELS.get(self._model.upper(), None) is None)
+        return DEVICE_MODELS.get(self._model.upper(), None) is None
 
     @property
     def fw_version(self) -> str:
@@ -361,7 +368,7 @@ class SensemeDevice:
     @property
     def has_sensor(self) -> bool:
         """Return True if the device has an occupancy sensor."""
-        return self._has_light
+        return self._has_sensor
 
     @property
     def device_indicators(self) -> str:
@@ -802,11 +809,6 @@ class SensemeFan(SensemeDevice):
         return True
 
     @property
-    def is_light(self) -> str:
-        """Return True if the device is a standalone light."""
-        return False
-
-    @property
     def has_light(self) -> bool:
         """Return True if the fan has an installed light."""
         return self._has_light
@@ -1011,11 +1013,6 @@ class SensemeLight(SensemeDevice):
             string += f", FW Version: {self._fw_version}"
 
         return string
-
-    @property
-    def is_fan(self) -> str:
-        """Return True if this device is a fan."""
-        return False
 
     @property
     def is_light(self) -> str:
