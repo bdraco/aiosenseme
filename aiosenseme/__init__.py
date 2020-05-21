@@ -1,13 +1,13 @@
 """aiosenseme library."""
 
-from .discovery import discover
-from .discovery import discover_any
-from .discovery import SensemeDiscovery
-from .fan import SensemeFan
+from .device import SensemeDevice, SensemeFan, SensemeLight
+from .discovery import SensemeDiscovery, discover, discover_any
 from .version import __version__
 
 __all__ = [
+    "SensemeDevice",
     "SensemeFan",
+    "SensemeLight",
     "SensemeDiscovery",
     "discover_any",
     "discover",

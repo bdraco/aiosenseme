@@ -21,7 +21,7 @@ import traceback
 
 import ifaddr
 
-from .fan import SensemeFan
+from .device import DEVICE_TYPES, SensemeDevice, SensemeFan, SensemeLight
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class SensemeDiscoveryEndpoint:
             return True  # opened connection but no transport is closed
         return self.transport.is_closing()
 
-    async def receive(self) -> SensemeFan:
+    async def receive(self) -> SensemeDevice:
         """Wait for discovered device and return it.
 
         Return None when the socket is closed.
@@ -96,7 +96,15 @@ class SensemeDiscoveryEndpoint:
                 _LOGGER.debug("Ignored Wall Switch '%s' on %s", msg, self.ip)
                 continue
             _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
-            device = SensemeFan(msg_data[0], msg_data[3], addr, msg_data[4])
+            device_type = DEVICE_TYPES.get(msg_data[4], "FAN")
+            if device_type == "FAN":
+                device = SensemeFan(
+                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                )
+            elif device_type == "LIGHT":
+                device = SensemeLight(
+                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                )
             return device
 
     def send_broadcast(self):
@@ -261,7 +269,7 @@ class SensemeDiscovery:
                                 else:
                                     _LOGGER.debug("Failed to start %s", device.name)
                             else:
-                                if await device.fill_out_secondary_info():
+                                if await device.fill_out_sec_info():
                                     self._devices.append(device)
                                     _LOGGER.debug("Discovered %s", device)
                                     found_new += 1
@@ -354,7 +362,7 @@ async def discover(value, timeout_seconds=5) -> SensemeFan:
     This method is a coroutine.
     """
     start = time.time()
-    discovery = SensemeDiscovery(True, 1)
+    discovery = SensemeDiscovery(False, 1)
     try:
         discovery.start()
         while True:
@@ -362,6 +370,9 @@ async def discover(value, timeout_seconds=5) -> SensemeFan:
             devices = discovery.devices.copy()
             for device in devices:
                 if device == value:
+                    await device.fill_out_sec_info()
+                    device.start()
+                    await device.update()
                     return device
             if time.time() - start > timeout_seconds:
                 return None

@@ -1,0 +1,17 @@
+DEBUG (MainThread) [aiosenseme.discovery] Received 'Master Bedroom Wall;DEVICE;ID;FF:FF:FF:FF:FF:FF;SWITCH,SENSEME' from 192.168.0.3 on 192.168.0.2
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [DEVICE;INDICATORS]='ON'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [SNSROCC;STATUS]='UNOCCUPIED'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [DEVICE;SERVER]='PRODUCTION'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [ERRORLOG;ENTRIES;NUM]='10'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [ERRORLOG;ENTRIES;MAX]='10'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [FW;NAME]='FW000004'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [FW;FW000004]='2.5.0'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [GROUP;LIST]='EMPTY'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [GROUP;ROOM;TYPE]='2'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NAME;VALUE]='Master Bedroom Wall'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NW;AP;STATUS]='OFF'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NW;DHCP]='OFF'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NW;PARAMS;ACTUAL]='192.168.0.3;255.255.255.0;192.168.0.1'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NW;SSID]='Network Name'
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [NW;TOKEN]='ffffffff-ffff-ffff-ffff-ffffffffffff
+DEBUG (MainThread) [aiosenseme.fan] Master Bedroom Wall: Param updated: [WALLCONTROL;CONFIGURE;FANSPEED]='LIGHTLEVEL'
