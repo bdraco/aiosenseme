@@ -325,14 +325,14 @@ class SensemeDevice:
         return self._is_connected
 
     @property
-    def model(self) -> str:
-        """Return Model of device."""
-        return DEVICE_MODELS.get(self._model.upper(), self._model.upper())
-
-    @property
     def device_type(self) -> str:
         """Return type of device."""
         return DEVICE_TYPES.get(self._model.upper(), "FAN")
+
+    @property
+    def model(self) -> str:
+        """Return Model of device."""
+        return DEVICE_MODELS.get(self._model.upper(), self._model.upper())
 
     @classmethod
     def models(cls) -> list:
@@ -342,6 +342,11 @@ class SensemeDevice:
             if model_name not in no_duplicates:
                 no_duplicates.append(model_name)
         return no_duplicates
+
+    @property
+    def is_unknown_model(self) -> str:
+        """Return True if the model is unknown."""
+        return not (DEVICE_MODELS.get(self._model.upper(), None) is None)
 
     @property
     def fw_version(self) -> str:
