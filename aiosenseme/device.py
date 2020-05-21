@@ -178,6 +178,11 @@ class SensemeDevice:
         self._fw_name = ""
         self._fw_version = None
         self._has_light = None
+        if self.model in ("Haiku Fan", "Haiku Light"):
+            self._has_sensor = True
+        else:
+            self._has_sensor = False
+        self._has_sensor = None
         self._is_running = False
         self._is_connected = False
         self._data = dict()
@@ -212,6 +217,8 @@ class SensemeDevice:
         if self._fw_version is None:
             return False
         if self._has_light is None:
+            return False
+        if self._has_sensor is None:
             return False
         if self._room_name is None:
             return False
@@ -344,6 +351,11 @@ class SensemeDevice:
     @property
     def has_light(self) -> bool:
         """Return True if the device has an installed light."""
+        return self._has_light
+
+    @property
+    def has_sensor(self) -> bool:
+        """Return True if the device has an occupancy sensor."""
         return self._has_light
 
     @property
@@ -1011,34 +1023,34 @@ class SensemeLight(SensemeDevice):
         return True
 
     @property
-    def light_colortemp(self) -> int:
+    def light_color_temp(self) -> int:
         """Return the light color temperature."""
-        level = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
-        if level:
-            return int(level)
+        color_temp = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
+        if color_temp:
+            return int(color_temp)
         return None
 
-    @light_colortemp.setter
-    def light_colortemp(self, color_temp: int):
+    @light_color_temp.setter
+    def light_color_temp(self, color_temp: int):
         """Set the light color temperature."""
-        if color_temp < self.light_colortemp_min:
-            color_temp = self.light_colortemp_min
-        if color_temp > self.light_colortemp_max:
-            color_temp = self.light_colortemp_max
+        if color_temp < self.light_color_temp_min:
+            color_temp = self.light_color_temp_min
+        if color_temp > self.light_color_temp_max:
+            color_temp = self.light_color_temp_max
         color_temp = int(round(color_temp / 100.0)) * 100
         self._send_command(f"LIGHT;COLOR;TEMP;VALUE;SET;{color_temp}")
 
     @property
-    def light_colortemp_min(self) -> int:
-        """Return the light color temperature minimum."""
+    def light_color_temp_min(self) -> int:
+        """Return the light color temperature minimum (warmest light)."""
         min_color_temp = self._data.get("LIGHT;COLOR;TEMP;MIN", None)
         if min_color_temp:
             return int(min_color_temp)
         return None
 
     @property
-    def light_colortemp_max(self) -> int:
-        """Return the light color temperature maximum."""
+    def light_color_temp_max(self) -> int:
+        """Return the light color temperature maximum (coolest light)."""
         max_color_temp = self._data.get("LIGHT;COLOR;TEMP;MAX", None)
         if max_color_temp:
             return int(max_color_temp)

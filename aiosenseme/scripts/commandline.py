@@ -158,7 +158,7 @@ def print_state(prefix: str, device: SensemeFan):
             msg += ", Light is off"
     elif device.is_light:
         if device.light_on:
-            msg += f": Light is on (brightness: {device.light_brightness}, color temp: {device.light_colortemp})"
+            msg += f": Light is on (brightness: {device.light_brightness}, color temp: {device.light_color_temp})"
         else:
             msg += ": Light is off"
     else:
@@ -291,10 +291,9 @@ async def process_args():
                     changed = True
                 device.light_on = args.light == "on"
             if args.colortemp is not None:
-                args.colortemp = int(round(args.colortemp / 100.0)) * 100
-                if device.colortemp != args.colortemp:
+                if device.light_color_temp != args.colortemp:
                     changed = True
-                device.colortemp = args.colortemp
+                device.light_color_temp = args.colortemp
         if changed:
             await asyncio.sleep(0.5)
             print_state("New State", device)
