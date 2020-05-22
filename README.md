@@ -2,8 +2,6 @@
 
 [![PyPI version](https://badge.fury.io/py/aiosenseme.svg)](https://badge.fury.io/py/aiosenseme) [![Downloads](https://pepy.tech/badge/aiosenseme)](https://pepy.tech/project/aiosenseme)
 
-Testing standalone Haiku Light.
-
 This asynchronous Python library provides periodic discovery, control and push-based status for SenseME fans and lights by Big Ass Fans. It was developed mainly to provide access to SenseME devices for [Home Assistant](https://www.home-assistant.io/) using asyncio but should work fine in other applications.
 
 This library (based on [TomFaulkner's](https://github.com/TomFaulkner/SenseMe) library) keeps an open socket to each controlled fan so that state changes from any source including local control are pushed more or less immediately. This approach is far more robust and responsive. A discovery task was also added to periodically detect SenseME devices on the network.
@@ -18,7 +16,7 @@ Thanks to [PenitentTangent2401](https://github.com/PenitentTangent2401) for help
 * Confirmed support of discontinued standalone Haiku Light.
 * Probably supports Haiku C fans.
 * The [i6 fan](https://www.bigassfans.com/fans/i6/) is NOT currently supported.
-* The discontinued [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) is NOT currently supported. There is a [chance](https://github.com/mikelawrence/senseme-hacs/issues/4) it will be supported in the future.
+* The discontinued [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) is NOT currently supported.
 
 ## Command line access
 

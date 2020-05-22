@@ -171,7 +171,7 @@ class SensemeDevice:
         """Initialize SensemeDevice Class."""
         self._name = name
         self.refresh_minutes = refresh_minutes
-        self._id = id
+        self._id = id.upper()
         self._ip = ip
         self._model = model
         self._room_name = None
@@ -202,7 +202,7 @@ class SensemeDevice:
             pass
         if isinstance(other, str):
             return other in [self._name, self._room_name]
-        if isinstance(other, SensemeFan):
+        if isinstance(other, SensemeDevice):
             return self._id == other.id
         return NotImplemented
 
@@ -1002,7 +1002,7 @@ class SensemeLight(SensemeDevice):
     """SensemeLight Class."""
 
     def __str__(self) -> str:
-        """Return string representation of SensemeFan object."""
+        """Return string representation of SensemeLight object."""
         string = f"Name: {self._name}"
         if self._room_name is not None:
             string += f", Room Name: {self._room_name}"

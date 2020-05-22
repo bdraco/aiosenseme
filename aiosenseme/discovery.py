@@ -1,7 +1,7 @@
 """SenseME Discovery.
 
 This class periodically broadcasts discovery packets and listens for response messages
-from SenseME fan by Big Ass Fans. Discovered fans are announced via callbacks.
+from SenseME devices by Big Ass Fans. Discovered devices are announced via callbacks.
 
 Based on work from Bruce at http://bruce.pennypacker.org/tag/senseme-plugin/
 and https://github.com/bpennypacker/SenseME-Indigo-Plugin
@@ -157,7 +157,7 @@ class SensemeDiscovery:
     """SenseME Discovery Class.
 
     This class periodically broadcasts discovery packets and listens
-    for response messages from SenseME fans by Big Ass Fans.
+    for response messages from SenseME devices by Big Ass Fans.
     """
 
     _devices = []  # all SensemeDiscovery objects use the same device list
@@ -172,7 +172,7 @@ class SensemeDiscovery:
 
     @property
     def devices(self):
-        """Get the current list of discovered fans."""
+        """Get the current list of discovered devices."""
         return self._devices
 
     def add_callback(self, callback):
@@ -241,9 +241,6 @@ class SensemeDiscovery:
         device = None
         while True:
             try:
-                found_new = 0
-                found_total = 0
-                found_devices = []
                 endpoints = await self._create_endpoints()
                 start = time.time()
                 while True:
@@ -265,38 +262,27 @@ class SensemeDiscovery:
                                 if await device.update():
                                     self._devices.append(device)
                                     _LOGGER.debug("Discovered %s", device)
-                                    found_new += 1
                                 else:
                                     _LOGGER.debug("Failed to start %s", device.name)
                             else:
                                 if await device.fill_out_sec_info():
                                     self._devices.append(device)
                                     _LOGGER.debug("Discovered %s", device)
-                                    found_new += 1
                                 else:
                                     _LOGGER.debug(
                                         "Failed to retrieve secondary info for %s",
                                         device.name,
                                     )
-                        if device not in found_devices:
-                            found_devices.append(device)
-                            found_total += 1
                         for callback in self._callbacks:
                             if inspect.iscoroutinefunction(callback):
                                 loop.create_task(callback(self._devices.copy()))
                             else:
                                 callback(self._devices.copy())
-                found_old = found_total - found_new
-                found_devices = None
-                if found_old > 1:
-                    _LOGGER.debug(
-                        "Discovered %s existing fan%s",
-                        found_old,
-                        "" if found_old == 1 else "s",
-                    )
-                elif found_new == 0:
-                    _LOGGER.debug("Discovered 0 fans")
-                await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
+                await asyncio.sleep(1)
+                wait = self.refresh_minutes * 60 + random.uniform(-10, 10)
+                _LOGGER.debug("Currently %s known senseme devices", len(self._devices))
+                _LOGGER.debug("Discovery waiting for %s seconds", int(wait))
+                await asyncio.sleep(wait)
             except asyncio.CancelledError:
                 _LOGGER.debug("Broadcaster task cancelled")
                 return
@@ -307,13 +293,12 @@ class SensemeDiscovery:
                 for endpoint in endpoints:
                     endpoint.abort()
                 endpoints = None
-                found_devices = None
         _LOGGER.error("Broadcaster task ended")
 
     def start(self):
         """Start both broadcaster and listener tasks.
 
-        Will maintain a list of discovered fans.
+        Will maintain a list of discovered devices.
         """
         if not self._is_running:
             loop = asyncio.get_event_loop()
@@ -322,7 +307,7 @@ class SensemeDiscovery:
     def stop(self):
         """Stop both broadcaster and listener tasks.
 
-        Any discovered fans will remain in memory and will continue to update.
+        Any discovered devices will remain in memory and will continue to update.
         """
         if self._is_running is True:
             self._broadcaster_task.cancel()
@@ -331,16 +316,16 @@ class SensemeDiscovery:
     def remove_discovered_devices(self):
         """Stop both broadcaster and listener tasks.
 
-        Any discovered fans will be stopped and removed from memory.
+        Any discovered devices will be stopped and removed from memory.
         """
         self.stop()
-        for fan in self._devices:
-            fan.stop()
+        for device in self._devices:
+            device.stop()
         self._devices = []
 
 
 async def discover_any(timeout_seconds=5) -> bool:
-    """Return True if any SenseME fans are found on the network.
+    """Return True if any SenseME devices are found on the network.
 
     This function will always take timeout_seconds to complete.
     This method is a coroutine.
@@ -350,14 +335,14 @@ async def discover_any(timeout_seconds=5) -> bool:
     await asyncio.sleep(timeout_seconds)
     count = len(discovery.devices)
     discovery.stop()
-    _LOGGER.debug("Discovered %s fan%s", count, "" if count == 1 else "s")
+    _LOGGER.debug("Discovered %s device%s", count, "" if count == 1 else "s")
     return count > 0
 
 
-async def discover(value, timeout_seconds=5) -> SensemeFan:
-    """Discover a fan with a fan name, room name or IP Address.
+async def discover(value, timeout_seconds=5) -> SensemeDevice:
+    """Discover a device with a name, room name or IP Address.
 
-    None is returned if the fan was not found.
+    None is returned if the device was not found.
     This function will take up timeout_seconds to complete.
     This method is a coroutine.
     """

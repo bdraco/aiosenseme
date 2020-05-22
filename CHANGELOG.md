@@ -1,9 +1,15 @@
 # Changelog for aiosenseme library
 
+## v0.4.1
+
+* Fix error discovery logic that treated a rediscovered Haiku Light as a new device.
+* Removed some unhelpful discovery debug messages.
+* Cleanup the usage of the word fan when device should be used.
+
 ## v0.4.0
 
 * Now supports standalone Haiku Light. Thanks to [PenitentTangent2401](https://github.com/PenitentTangent2401) for help in testing and debugging these changes.
-* Add --listen option to command line. This will open a connection to specified device name or IP address and show status information as the fans sends it.
+* Add ```--listen``` option to command line. This will open a connection to specified device name or IP address and show status information as the fans sends it.
 
 ## v0.3.3
 
