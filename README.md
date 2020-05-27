@@ -14,9 +14,9 @@ Thanks to [PenitentTangent2401](https://github.com/PenitentTangent2401) for help
 
 * Confirmed support of Haiku, Haiku H, and Haiku L fans.
 * Confirmed support of discontinued standalone Haiku Light.
+* Supports [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) indirectly through fan status reporting.
 * Probably supports Haiku C fans.
 * The [i6 fan](https://www.bigassfans.com/fans/i6/) is NOT currently supported.
-* The discontinued [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) is NOT currently supported.
 
 ## Command line access
 
