@@ -21,7 +21,7 @@ import traceback
 
 import ifaddr
 
-from .device import DEVICE_TYPES, SensemeDevice, SensemeFan, SensemeLight
+from .device import DEVICE_TYPES, IGNORE_MODELS, SensemeDevice, SensemeFan, SensemeLight
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,8 +92,8 @@ class SensemeDiscoveryEndpoint:
             msg_data = msg.split(";")
             if len(msg_data) != 5:
                 continue
-            if msg_data[4] == "SWITCH,SENSEME":
-                _LOGGER.debug("Ignored Wall Switch '%s' on %s", msg, self.ip)
+            if msg_data[4].upper() in IGNORE_MODELS:
+                _LOGGER.debug("Ignored '%s' on %s", msg, self.ip)
                 continue
             _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
             device_type = DEVICE_TYPES.get(msg_data[4], "FAN")

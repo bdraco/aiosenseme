@@ -76,6 +76,10 @@ DEVICE_TYPES = {
     "LIGHT,HAIKU": "LIGHT",
 }
 
+IGNORE_MODELS = [
+    "SWITCH,SENSEME",
+]
+
 
 class SensemeEndpoint:
     """High-level endpoint for SenseME protocol."""
@@ -178,8 +182,10 @@ class SensemeDevice:
         self._fw_name = ""
         self._fw_version = None
         self._has_light = None
-        if self.model in ("Haiku Fan", "Haiku Light"):
+        if self.model in ["Haiku Fan", "Haiku Light"]:
             self._has_sensor = True
+        elif self.model == "Haiku L Fan":
+            self._has_sensor = None
         else:
             self._has_sensor = False
         self._is_running = False
@@ -216,6 +222,8 @@ class SensemeDevice:
         if self._fw_version is None:
             return False
         if self._has_light is None:
+            return False
+        if self._has_sensor is None:
             return False
         if self._room_name is None:
             return False
@@ -283,6 +291,11 @@ class SensemeDevice:
                 await self._query_device(reader, writer, "DEVICE;LIGHT")
             ).upper() in ("PRESENT", "PRESENT;COLOR")
             self._room_name = await self._query_device(reader, writer, "GROUP;LIST")
+            if self._has_sensor is None:
+                self._has_sensor = (
+                    await self._query_device(reader, writer, "DEVICE;OPTION;SENSORS")
+                ).upper() == "PRESENT"
+
             return True
         except OSError:
             _LOGGER.debug(
@@ -753,6 +766,8 @@ class SensemeDevice:
                         self._has_light = value in ("PRESENT", "PRESENT;COLOR")
                     elif key == "GROUP;LIST":
                         self._room_name = value
+                    elif key == "DEVICE;OPTION;SENSORS":
+                        self._has_sensor = value == "PRESENT"
                     self._execute_callbacks()
             except asyncio.CancelledError:
                 _LOGGER.debug("%s: Listener task cancelled", self._name)

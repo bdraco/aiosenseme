@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.4.2
+
+* Detects occupancy sensor for Haiku L fans with attached Wireless Wall Controller.
+
 ## v0.4.1
 
 * Fix error discovery logic that treated a rediscovered Haiku Light as a new device.
