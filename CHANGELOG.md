@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.4.3
+
+* Fix missing occupancy sensor for standalone Haiku Light. Regression caused by v0.4.2.
+
 ## v0.4.2
 
 * Detects occupancy sensor for Haiku L fans with attached Wireless Wall Controller.

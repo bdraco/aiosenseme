@@ -105,5 +105,6 @@ State: Light is on (brightness: 9, color temp: 5000)
 ## Issues
 
 * Early testing indicates the i6 fan from Big Ass Fans is not compatible with this library. The Big Ass Fans [website](https://www.bigassfans.com/fans/i6/) says the i6 fan has SenseME technology but it uses a different app which requires Bluetooth for initial setup. There is some [evidence](https://github.com/mikelawrence/senseme-hacs/issues/5) that WiFi is still used to control the fan from the app once setup.
+* The occupancy sensor is treated differently than other fan settings/states; occupancy state changes are not pushed immediately and must be detected with periodic status updates. So unfortunately this sensor will not seem very responsive.
 * UDP port 31415 must be available and not blocked by a firewall.
 * This library will not handle multiple instances of discovery running on the same machine.

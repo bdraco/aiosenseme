@@ -762,12 +762,15 @@ class SensemeDevice:
                     elif key == ("FW;" + self._fw_name):
                         self._fw_version = value
                     elif key == "DEVICE;LIGHT":
-                        value = value.upper()
-                        self._has_light = value in ("PRESENT", "PRESENT;COLOR")
+                        if self._has_light is None:
+                            value = value.upper()
+                            self._has_light = value in ("PRESENT", "PRESENT;COLOR")
                     elif key == "GROUP;LIST":
                         self._room_name = value
                     elif key == "DEVICE;OPTION;SENSORS":
-                        self._has_sensor = value == "PRESENT"
+                        if self._has_sensor is None:
+                            value = value.upper()
+                            self._has_sensor = value == "PRESENT"
                     self._execute_callbacks()
             except asyncio.CancelledError:
                 _LOGGER.debug("%s: Listener task cancelled", self._name)
