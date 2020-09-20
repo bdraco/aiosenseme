@@ -613,8 +613,7 @@ class SensemeDevice:
         """Run all callbacks to indicate something has changed."""
         for callback in self._callbacks:
             if inspect.iscoroutinefunction(callback):
-                loop = asyncio.get_event_loop()
-                loop.create_task(callback())
+                asyncio.create_task(callback())
             else:
                 callback()
 
@@ -679,10 +678,9 @@ class SensemeDevice:
                     self._is_connected = False
                     self._execute_callbacks()
                     self._endpoint = SensemeEndpoint()
-                    loop = asyncio.get_event_loop()
                     try:
                         _LOGGER.debug("%s: Connecting", self._name)
-                        await loop.create_connection(
+                        await asyncio.get_running_loop().create_connection(
                             lambda: SensemeProtocol(self._name, self._endpoint),
                             self._ip,
                             PORT,
@@ -696,7 +694,7 @@ class SensemeDevice:
                         self._endpoint = None
                         await asyncio.sleep(60)
                         continue
-                    self._updater_task = loop.create_task(self._updater())
+                    self._updater_task = asyncio.create_task(self._updater())
                     self._error_count = 0
                     self._is_connected = True
                     self._execute_callbacks()
@@ -739,7 +737,9 @@ class SensemeDevice:
                     value = ";".join(values[-valuecount:])
                     if key == "ERROR":
                         _LOGGER.error(
-                            "%s: Command error response: '%s'", self._name, value,
+                            "%s: Command error response: '%s'",
+                            self._name,
+                            value,
                         )
                         continue
                     if key == "TIME;VALUE":
@@ -754,7 +754,10 @@ class SensemeDevice:
                         self._first_update = True
                     self._data[key] = value
                     _LOGGER.debug(
-                        "%s: Param updated: [%s]='%s'", self._name, key, value,
+                        "%s: Param updated: [%s]='%s'",
+                        self._name,
+                        key,
+                        value,
                     )
                     # update certain local variables that are not part of data
                     if key == "FW;NAME":
@@ -791,8 +794,7 @@ class SensemeDevice:
     def start(self):
         """Start the async task to handle responses from the device."""
         if not self._is_running:
-            loop = asyncio.get_event_loop()
-            self._listener_task = loop.create_task(self._listener())
+            asyncio.create_task(self._listener())
             self._is_running = True
             _LOGGER.debug("%s: Started", self._name)
 

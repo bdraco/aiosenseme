@@ -35,7 +35,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     license="GPL3",
-    install_requires=["ifaddr>=0.1.6"],
+    install_requires=["ifaddr>=0.1.7"],
     entry_points={
         "console_scripts": ["aiosenseme = aiosenseme.scripts.commandline:cli"],
     },
@@ -45,6 +45,7 @@ setup(
         "Framework :: AsyncIO",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Topic :: Home Automation",
     ],
     keywords="Haiku HaikuHome SenseME fan home automation BigAssFans",

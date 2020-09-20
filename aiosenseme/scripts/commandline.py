@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import logging
+import sys
 from typing import List
 
 import aiosenseme
@@ -206,10 +207,20 @@ async def process_args():
             await asyncio.sleep(4)
     if args.discover is True:
         try:
+            print("Attempting to discover SenseME devices...")
             discovery = SensemeDiscovery(True, 1)
             discovery.add_callback(discovered)
             discovery.start()
             await asyncio.sleep(4)
+            count = len(discovery.devices)
+            if count == 0:
+                print("Discovered no SenseME devices.")
+            else:
+                if count == 1:
+                    plural = ""
+                else:
+                    plural = "s"
+                print(f"Discovered {count} SenseME device{plural}.")
         finally:
             discovery.stop()
         return
@@ -306,3 +317,7 @@ def cli():
     task = asyncio.Task(process_args())
     loop = asyncio.get_event_loop()
     loop.run_until_complete(task)
+
+
+if __name__ == "__main__":
+    cli()

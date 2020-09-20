@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.4.4
+
+* Fix protocol error on Windows and Python 3.7.8 and above. This error prevented discovery of any SenseME devices.
+
 ## v0.4.3
 
 * Fix missing occupancy sensor for standalone Haiku Light. Regression caused by v0.4.2.

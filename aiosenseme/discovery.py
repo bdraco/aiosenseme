@@ -16,6 +16,7 @@ import ipaddress
 import logging
 import random
 import socket
+import sys
 import time
 import traceback
 
@@ -27,10 +28,19 @@ _LOGGER = logging.getLogger(__name__)
 
 PORT = 31415
 
+# the default windows event loop (ProactorEventLoop) does not support
+# create_datagram_endpoint() needed by this module. Switching to the
+# SelectorEventLoop fixes this problem but may have unintended consequences.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.get_event_loop()  # start the loop
+    _LOGGER.debug("Changing event loop for Windows")
+
 
 class SensemeDiscoveryEndpoint:
     """High-level endpoint for SenseME Discovery protocol."""
 
+    # one receive queue for all endpoints
     receive_queue = asyncio.Queue()
 
     def __init__(self, ip: str = None):
@@ -183,7 +193,7 @@ class SensemeDiscovery:
         if callback not in self._callbacks:
             self._callbacks.append(callback)
             if inspect.iscoroutinefunction(callback):
-                asyncio.get_event_loop().create_task(callback(self._devices.copy()))
+                asyncio.create_task(callback(self._devices.copy()))
                 _LOGGER.debug("Added coroutine callback")
             else:
                 callback(self._devices.copy())
@@ -198,14 +208,14 @@ class SensemeDiscovery:
     async def _create_endpoints(self):
         """Create an endpoint per interface and return as a list of endpoints."""
         endpoints = []
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         listening = 0
         for adapter in ifaddr.get_adapters():
             for ip in adapter.ips:
                 if ip.is_IPv4 and not ipaddress.ip_address(ip.ip).is_loopback:
-                    endpoint = SensemeDiscoveryEndpoint(ip.ip)
                     # _LOGGER.debug("Found IPv4 %s", ip.ip)
                     try:
+                        endpoint = SensemeDiscoveryEndpoint(ip.ip)
                         await loop.create_datagram_endpoint(
                             lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
                             local_addr=(ip.ip, PORT),
@@ -237,7 +247,6 @@ class SensemeDiscovery:
         This method is a coroutine.
         """
         self._is_running = True
-        loop = asyncio.get_event_loop()
         device = None
         while True:
             try:
@@ -275,7 +284,7 @@ class SensemeDiscovery:
                                     )
                         for callback in self._callbacks:
                             if inspect.iscoroutinefunction(callback):
-                                loop.create_task(callback(self._devices.copy()))
+                                asyncio.create_task(callback(self._devices.copy()))
                             else:
                                 callback(self._devices.copy())
                 await asyncio.sleep(1)
@@ -296,16 +305,15 @@ class SensemeDiscovery:
         _LOGGER.error("Broadcaster task ended")
 
     def start(self):
-        """Start both broadcaster and listener tasks.
+        """Start broadcaster task.
 
         Will maintain a list of discovered devices.
         """
         if not self._is_running:
-            loop = asyncio.get_event_loop()
-            self._broadcaster_task = loop.create_task(self._broadcaster())
+            self._broadcaster_task = asyncio.create_task(self._broadcaster())
 
     def stop(self):
-        """Stop both broadcaster and listener tasks.
+        """Stop broadcaster task.
 
         Any discovered devices will remain in memory and will continue to update.
         """
@@ -314,7 +322,7 @@ class SensemeDiscovery:
             self._is_running = False
 
     def remove_discovered_devices(self):
-        """Stop both broadcaster and listener tasks.
+        """Stop broadcaster task.
 
         Any discovered devices will be stopped and removed from memory.
         """
