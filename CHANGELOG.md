@@ -1,8 +1,12 @@
 # Changelog for aiosenseme library
 
+## v0.4.5
+
+* Fix error when cancelling the listener task of a device when stop() is called. Thanks to [briantho](https://github.com/briantho) for bringing this to my attention.
+
 ## v0.4.4
 
-* Fix protocol error on Windows and Python 3.7.8 and above. This error prevented discovery of any SenseME devices.
+* Fix protocol error on Windows and Python 3.7.8 and above. This error prevented discovery of any SenseME devices. Thanks to [briantho](https://github.com/briantho) for bringing this to my attention.
 
 ## v0.4.3
 

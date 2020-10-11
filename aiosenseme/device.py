@@ -794,7 +794,7 @@ class SensemeDevice:
     def start(self):
         """Start the async task to handle responses from the device."""
         if not self._is_running:
-            asyncio.create_task(self._listener())
+            self._listener_task = asyncio.create_task(self._listener())
             self._is_running = True
             _LOGGER.debug("%s: Started", self._name)
 
