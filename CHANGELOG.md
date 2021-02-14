@@ -1,5 +1,24 @@
 # Changelog for aiosenseme library
 
+## v0.5.0
+
+* Devices can now be added with an IP address instead of being discovered. Some network configurations will not allow UDP Discovery packets through but a direct TCP connection will work.
+* Add support for locating a fan by IP address in the command line.
+* Added additional error checking on Discovery listener sockets.
+* API additions
+  * SensemeDeviceInfo class to improve interaction with other code. Great for storing key info which ca be used to recover a device later.
+  * SensemeDiscovery.add_by_device_info(info) allows you to add a device by SensemeDeviceInfo. It will be added to the discovery device list just like it was discovered. This works for both fans and lights.
+  * SensemeDiscovery.add_by_ip_address(address) allows you to add a device by IP address. It will be added to the discovery device list just like it was discovered. This works for both fans and lights.
+  * aiosenseme.async_get_device_by_device_info(info) connects to a device using SensemeDeviceInfo, returns an appropriate SensemeFan or SensemeLight object.
+  * aiosenseme.async_get_device_by_ip_address(address) connects to a device via the specified IP address, determines key information and returns an approrpriate SensemeFan or SensemeLight object.
+  * SensemeDevice.mac is MAC address of the device.
+  * SensemeDevice.uuid is the Network Token (UUID) obtained from the device.
+  * Creating a SensemeDevice has a number of new parameters.
+  * Add SensemeFan.fan_sleep_mode property
+* API breaking changes.
+  * Creating a SensemeDevice object no longer has id as a parameter. Instead it is now called mac. Also the ip parameter is now address.
+  * SensemeDevice.id is removed. In previous versions this was MAC address of the Device. The MAC address is now available as SensemeDevice.mac
+
 ## v0.4.5
 
 * Fix error when cancelling the listener task of a device when stop() is called. Thanks to [briantho](https://github.com/briantho) for bringing this to my attention.

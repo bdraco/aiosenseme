@@ -3,12 +3,10 @@
 import argparse
 import asyncio
 import logging
-import sys
 from typing import List
 
 import aiosenseme
-from aiosenseme import SensemeDiscovery, SensemeDevice
-from aiosenseme import __version__
+from aiosenseme import SensemeDevice, SensemeDiscovery, __version__
 
 ARGS = argparse.ArgumentParser(
     description="Discover and control SenseME devices by Big Ass Fans."
@@ -20,13 +18,6 @@ ARGS.add_argument(
     dest="version",
     default=False,
     help="display version number",
-)
-ARGS.add_argument(
-    "--listen",
-    action="store",
-    dest="listen",
-    default=None,
-    help="listen to SenseME device name or IP address",
 )
 ARGS.add_argument(
     "--debug",
@@ -52,12 +43,20 @@ ARGS.add_argument(
     help="list known SenseME device models",
 )
 ARGS.add_argument(
+    "-i",
+    "--ip",
+    action="store",
+    dest="ip",
+    default=None,
+    help="IP Address",
+)
+ARGS.add_argument(
     "-n",
     "--name",
     action="store",
     dest="name",
     default=None,
-    help="SenseME device name, room name or IP address",
+    help="SenseME device name or room name",
 )
 ARGS.add_argument(
     "-f",
@@ -136,8 +135,8 @@ def print_device(device: SensemeDevice):
     else:
         msg += f"  Model: {device.model}, "
     msg += f"FW Version: {device.fw_version}\n"
-    msg += f"  IP Addr: {device.ip}, MAC Addr: {device.mac}\n"
-    msg += f"  Token: {device.network_token}"
+    msg += f"  IP Addr: {device.address}, MAC Addr: {device.mac}\n"
+    msg += f"  UUID: {device.uuid}"
     print(msg)
 
 
@@ -159,7 +158,8 @@ def print_state(prefix: str, device: SensemeDevice):
             msg += ", Light is off"
     elif device.is_light:
         if device.light_on:
-            msg += f": Light is on (brightness: {device.light_brightness}, color temp: {device.light_color_temp})"
+            msg += f": Light is on (brightness: {device.light_brightness}"
+            msg += f", color temp: {device.light_color_temp})"
         else:
             msg += ": Light is off"
     else:
@@ -187,7 +187,7 @@ async def process_args():
         logging.basicConfig(level=logging.DEBUG)
     if args.version is True:
         print("aiosenseme %s" % __version__)
-        print("Copyright (C) 2020 by Mike Lawrence")
+        print("Copyright (C) 2021 by Mike Lawrence")
         print(
             "This is free software. You may redistribute copies of it under the terms"
         )
@@ -196,31 +196,24 @@ async def process_args():
         )
         print("There is NO WARRANTY, to the extent permitted by law.")
         return
-    if args.listen is not None:
-        # Force debugging on
-        logging.basicConfig(level=logging.DEBUG)
-        device = await aiosenseme.discover(args.listen, 5)
-        if device is None:
-            print(f"Name/Room/IP address '{args.listen}' not found")
-            return
-        while True:
-            await asyncio.sleep(4)
     if args.discover is True:
         try:
             print("Attempting to discover SenseME devices...")
             discovery = SensemeDiscovery(True, 1)
             discovery.add_callback(discovered)
             discovery.start()
-            await asyncio.sleep(4)
+            # asyncio.create_task(discovery.async_add_by_ip("172.20.1.57"))
+            # asyncio.create_task(discovery.async_add_by_ip("172.20.1.253"))
+            await asyncio.sleep(5)
             count = len(discovery.devices)
             if count == 0:
-                print("Discovered no SenseME devices.")
+                print("Found no SenseME devices.")
             else:
                 if count == 1:
                     plural = ""
                 else:
                     plural = "s"
-                print(f"Discovered {count} SenseME device{plural}.")
+                print(f"Found {count} SenseME device{plural}.")
         finally:
             discovery.stop()
         return
@@ -235,13 +228,20 @@ async def process_args():
                 msg += ", " + model
         print(msg)
         return
-    if args.name is None:
-        print("You must specify a SenseME device name using -n or --name")
+    if not args.name and not args.ip:
+        print("You must specify a SenseME device by using -n/--name or -i/--ip")
         return
-    device = await aiosenseme.discover(args.name, 2)
-    if device is None:
-        print(f"Name/Room/IP address '{args.name}' not found")
-        return
+    if args.ip is not None:
+        device = await aiosenseme.async_get_device_by_ip_address(args.ip, 5)
+        if device is None:
+            print(f"Device at IP '{args.ip}' not found")
+            return
+        await device.async_update()
+    elif args.name is not None:
+        device = await aiosenseme.discover(args.name, 2)
+        if device is None:
+            print(f"Name or Room '{args.name}' not found")
+            return
     print_device(device)
     print_state("State", device)
     changed = False

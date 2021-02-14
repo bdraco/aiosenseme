@@ -11,6 +11,7 @@ Based on work from TomFaulkner at https://github.com/TomFaulkner/SenseMe
 Source can be found at https://github.com/mikelawrence/aiosenseme
 """
 import asyncio
+import errno
 import inspect
 import ipaddress
 import logging
@@ -22,7 +23,8 @@ import traceback
 
 import ifaddr
 
-from .device import DEVICE_TYPES, IGNORE_MODELS, SensemeDevice, SensemeFan, SensemeLight
+from .device import (DEVICE_TYPES, IGNORE_MODELS, SensemeDevice, SensemeFan,
+                     SensemeLight, async_get_device_by_ip_address)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,11 +111,11 @@ class SensemeDiscoveryEndpoint:
             device_type = DEVICE_TYPES.get(msg_data[4], "FAN")
             if device_type == "FAN":
                 device = SensemeFan(
-                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                    name=msg_data[0], mac=msg_data[3], address=addr, base_model=msg_data[4]
                 )
             elif device_type == "LIGHT":
                 device = SensemeLight(
-                    name=msg_data[0], id=msg_data[3], ip=addr, model=msg_data[4]
+                    name=msg_data[0], mac=msg_data[3], address=addr, base_model=msg_data[4]
                 )
             return device
 
@@ -185,6 +187,40 @@ class SensemeDiscovery:
         """Get the current list of discovered devices."""
         return self._devices
 
+    async def async_add_by_ip_address(self, address: str):
+        """Add a device by IP address."""
+        device = await async_get_device_by_ip_address(address, 5)
+        if device is None:
+            _LOGGER.debug(
+                "Add device by IP Address failed. Unable to connect '%s'", address
+            )
+            return
+        if self.start_first:
+            if device not in self._devices:
+                await device.async_update()
+                if device not in self._devices:
+                    self._devices.append(device)
+                    _LOGGER.debug("Add by IP address %s", device)
+                else:
+                    _LOGGER.debug(
+                        "Did not by IP address %s. Device already exists", address
+                    )
+                    return
+        else:
+            if device not in self._devices:
+                self._devices.append(device)
+                _LOGGER.debug("Add by IP address %s", device)
+            else:
+                _LOGGER.debug(
+                    "Did not by IP address %s. Device already exists", address
+                )
+                return
+        for callback in self._callbacks:
+            if inspect.iscoroutinefunction(callback):
+                asyncio.create_task(callback(self._devices.copy()))
+            else:
+                callback(self._devices.copy())
+
     def add_callback(self, callback):
         """Add callback function/coroutine.
 
@@ -224,19 +260,37 @@ class SensemeDiscovery:
                         )
                         endpoints.append(endpoint)
                         listening += 1
-                    except OSError:
-                        last_error = (
-                            f"Create datagram endpoint error on {ip.ip}\n"
-                            f"{traceback.format_exc()}"
-                        )
-                        _LOGGER.debug(last_error)
+                    except OSError as e:
+                        # borrowed this error handling from python-zeroconf
+                        _errno = e.args[0]
+                        err_einval = {errno.EINVAL}
+                        if sys.platform == "win32":
+                            err_einval |= {errno.WSAEINVAL}
+                        if _errno == errno.EADDRINUSE:
+                            _LOGGER.debug(
+                                "Unable to listen on %s. " "Address already in use",
+                                ip.ip,
+                            )
+                        elif _errno == errno.EADDRNOTAVAIL:
+                            _LOGGER.debug(
+                                "Unable to listen on %s. " "Address not available",
+                                ip.ip,
+                            )
+                        elif _errno in err_einval:
+                            _LOGGER.debug(
+                                "Unable to listen on %s. " "Multicast not supported",
+                                ip.ip,
+                            )
+                        else:
+                            _LOGGER.error(
+                                "Unable to listen on %s.\n%s",
+                                traceback.format_exc(),
+                                ip.ip,
+                            )
+
         if listening == 0:
             # failed to bind to any address
-            _LOGGER.error(
-                "Failed to listen for discovery responses on any address. "
-                "Last error\n%s",
-                last_error,
-            )
+            _LOGGER.error("Failed to listen on any address.")
 
         return endpoints
 
@@ -268,15 +322,17 @@ class SensemeDiscovery:
                     if device is not None:
                         if device not in self._devices:
                             if self.start_first:
-                                if await device.update():
-                                    self._devices.append(device)
-                                    _LOGGER.debug("Discovered %s", device)
+                                if await device.async_update():
+                                    if device not in self._devices:
+                                        self._devices.append(device)
+                                        _LOGGER.debug("Discovered %s", device)
                                 else:
                                     _LOGGER.debug("Failed to start %s", device.name)
                             else:
-                                if await device.fill_out_sec_info():
-                                    self._devices.append(device)
-                                    _LOGGER.debug("Discovered %s", device)
+                                if await device.async_fill_out_sec_info():
+                                    if device not in self._devices:
+                                        self._devices.append(device)
+                                        _LOGGER.debug("Discovered %s", device)
                                 else:
                                     _LOGGER.debug(
                                         "Failed to retrieve secondary info for %s",
@@ -294,6 +350,10 @@ class SensemeDiscovery:
                 await asyncio.sleep(wait)
             except asyncio.CancelledError:
                 _LOGGER.debug("Broadcaster task cancelled")
+                return
+            except IndexError:
+                # Caused by not listening on any endpoint.
+                # _create_endpoints() already reported the error
                 return
             except Exception:
                 _LOGGER.error("Broadcaster task error\n%s", traceback.format_exc())
@@ -332,6 +392,28 @@ class SensemeDiscovery:
         self._devices = []
 
 
+async def discover_all(timeout_seconds=5) -> bool:
+    """Returns all SenseME devices found on the network.
+
+    This function will always take timeout_seconds to complete.
+    This method is a coroutine.
+    """
+    start = time.time()
+    discovery = SensemeDiscovery(False)
+    try:
+        discovery.start()
+        while True:
+            await asyncio.sleep(0.1)
+            for device in discovery.devices:
+                await device.async_fill_out_sec_info()
+            if time.time() - start > timeout_seconds:
+                return discovery.devices.copy()
+    finally:
+        count = len(discovery.devices)
+        _LOGGER.debug("Discovered %s device%s", count, "" if count == 1 else "s")
+        discovery.stop()
+
+
 async def discover_any(timeout_seconds=5) -> bool:
     """Return True if any SenseME devices are found on the network.
 
@@ -348,14 +430,14 @@ async def discover_any(timeout_seconds=5) -> bool:
 
 
 async def discover(value, timeout_seconds=5) -> SensemeDevice:
-    """Discover a device with a name, room name or IP Address.
+    """Discover a device with a name or room name.
 
     None is returned if the device was not found.
     This function will take up timeout_seconds to complete.
     This method is a coroutine.
     """
     start = time.time()
-    discovery = SensemeDiscovery(False, 1)
+    discovery = SensemeDiscovery(False)
     try:
         discovery.start()
         while True:
@@ -363,9 +445,9 @@ async def discover(value, timeout_seconds=5) -> SensemeDevice:
             devices = discovery.devices.copy()
             for device in devices:
                 if device == value:
-                    await device.fill_out_sec_info()
+                    await device.async_fill_out_sec_info()
                     device.start()
-                    await device.update()
+                    await device.async_update()
                     return device
             if time.time() - start > timeout_seconds:
                 return None
