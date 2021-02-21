@@ -166,31 +166,49 @@ class SensemeDevice:
 
     def __init__(
         self,
-        name: str,
-        id: str,  # pylint: disable=redefined-builtin
-        ip: str,
-        model: str,
+        info: dict = None,
+        name: str = None,
+        uuid: str = None,
+        mac: str = None,
+        address: str = None,
+        base_model: str = None,
         refresh_minutes: int = 1,
     ):
         """Initialize SensemeDevice Class."""
-        self._name = name
         self.refresh_minutes = refresh_minutes
-        self._id = id.upper()
-        self._ip = ip
-        self._model = model
-        self._room_name = None
-        self._fw_name = ""
-        self._fw_version = None
-        self._has_light = None
-        if self.model in ["Haiku Fan", "Haiku Light"]:
-            self._has_sensor = True
-        elif self.model == "Haiku L Fan":
-            self._has_sensor = None
+        if info is not None:
+            self._name = info.get("name", None)
+            self._uuid = info.get("uuid", None)
+            self._mac = info.get("mac", None)
+            self._address = info.get("address", None)
+            self._base_model = info.get("base_model", None)
+            self._has_light = info.get("has_light", None)
+            self._has_sensor = info.get("has_sensor", None)
         else:
-            self._has_sensor = False
+            self._name = name
+            self._uuid = uuid
+            self._mac = mac
+            self._address = address
+            self._base_model = base_model
+            self._has_light = None
+            if base_model is not None:
+                if self.model in ["Haiku Fan", "Haiku Light"]:
+                    self._has_sensor = True
+                elif self.model == "Haiku L Fan":
+                    self._has_sensor = None
+                else:
+                    self._has_sensor = False
+            else:
+                self._has_sensor = None
+        self._room_name = None
+        self._room_type = None
+        self._fw_name = "Unknown"
+        self._fw_version = None
+
+        self._data = dict()
         self._is_running = False
         self._is_connected = False
-        self._data = dict()
+        self._connection_lost = False
         self._endpoint = None
         self._listener_task = None
         self._updater_task = None
@@ -203,111 +221,60 @@ class SensemeDevice:
         """Equals magic method."""
         try:
             ip_addr = ipaddress.ip_address(other)
-            return ip_addr == ipaddress.ip_address(self._ip)
+            return ip_addr == ipaddress.ip_address(self._address)
         except ValueError:
             pass
-        if isinstance(other, str):
-            return other in [self._name, self._room_name]
         if isinstance(other, SensemeDevice):
-            return self._id == other.id
+            if self._address and other.address:
+                return self._address == other.address
+        if isinstance(other, str):
+            return other in [self._name]
+
         return NotImplemented
 
     def __hash__(self) -> int:
         """Hash magic method."""
-        return hash(self._id)
+        return hash(self._uuid)
 
     @property
     def is_sec_info_complete(self) -> bool:
         """Return if all secondary information is complete."""
-        if self._fw_version is None:
+        if self._name is None:
+            return False
+        if self._uuid is None:
+            return False
+        if self._mac is None:
+            return False
+        if self._base_model is None:
+            return False
+        if self._room_name is None:
+            return False
+        if self._room_type is None:
             return False
         if self._has_light is None:
             return False
         if self._has_sensor is None:
             return False
-        if self._room_name is None:
+        if self._fw_version is None:
+            return False
+        if self._base_model is None:
             return False
         return True
 
-    async def _query_device(
-        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, cmd: str
-    ) -> str:
-        """Send command to SenseME device and parses response.
-
-        None is returned if response was 'ERROR;PARSE'
-        """
-        msg = f"<{self.name};{cmd};GET>"
-        # _LOGGER.debug("Sent command: '%s'", msg)
-        writer.write(msg.encode("utf-8"))
-        leftover = ""
-        while True:
-            # socket will throw a timeout error and abort this function if
-            # no proper response is received
-            data = await reader.read(1048)
-            data = data.decode("utf-8")
-            data = leftover + data
-            leftover = ""
-            # The data received may have multiple parenthesized data
-            # points. Split them and put each message onto the queue.
-            # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
-            # then split on the '|'
-            for rsp in data.replace(")(", ")|(").split("|"):
-                if rsp[-1] != ")":
-                    self._leftover = rsp
-                else:
-                    # _LOGGER.debug("Received response: '%s'" ,p)
-                    # remove '(device name' at the beginning and the ')' at
-                    # the end of the string
-                    _, result = rsp[:-1].split(";", 1)
-                    values = result.split(";")
-                    key = ";".join(values[:-1])
-                    value = ";".join(values[-1:])
-                    if key == "ERROR":
-                        _LOGGER.error("%s: Sent bad command: %s", self._name, msg)
-                    else:
-                        if cmd in rsp:
-                            # correct response, return the value
-                            # _LOGGER.debug("Received response: '%s'", value)
-                            return value
-
-    async def fill_out_sec_info(self) -> bool:
-        """Retrieve secondary info from the SenseME device directly.
-
-        Secondary data is fw_version, has_light and room_name which can only be
-        filled in after connecting with the device. The secondary data is also populated
-        when the device is started and after the device is connected.
-        This method is a coroutine.
-        """
-        if self.is_sec_info_complete:
-            # info is already complete
-            return True
-        try:
-            reader, writer = await asyncio.open_connection(self.ip, PORT)
-            self._fw_name = await self._query_device(reader, writer, "FW;NAME")
-            self._fw_version = await self._query_device(
-                reader, writer, f"FW;{self._fw_name}"
-            )
-            self._has_light = (
-                await self._query_device(reader, writer, "DEVICE;LIGHT")
-            ).upper() in ("PRESENT", "PRESENT;COLOR")
-            self._room_name = await self._query_device(reader, writer, "GROUP;LIST")
-            if self._has_sensor is None:
-                self._has_sensor = (
-                    await self._query_device(reader, writer, "DEVICE;OPTION;SENSORS")
-                ).upper() == "PRESENT"
-
-            return True
-        except OSError:
-            _LOGGER.debug(
-                "%s: Failed to retrieve secondary information from device\n%s",
-                self._name,
-                traceback.format_exc(),
-            )
-            return False
-        finally:
-            # close the socket
-            writer.close()
-            await writer.wait_closed()
+    @property
+    def get_device_info(self) -> dict:
+        """Get a dict with all key information abouth this device."""
+        return {
+            "name": self._name,
+            "uuid": self._uuid,
+            "mac": self._mac,
+            "address": self._address,
+            "base_model": self._base_model,
+            "has_light": self._has_light,
+            "has_sensor": self._has_sensor,
+            "is_fan": self.is_fan,
+            "is_light": self.is_light,
+        }
 
     @property
     def is_fan(self) -> str:
@@ -322,22 +289,35 @@ class SensemeDevice:
     @property
     def name(self) -> str:
         """Return name of device."""
+        if self._name is None:
+            if self._mac is None:
+                return self._address
+            return self._mac
         return self._name
 
     @property
-    def id(self) -> str:
-        """Return id of device. Also known as MAC address."""
-        return self._id
+    def uuid(self) -> str:
+        """Return UUID for this device.
+
+        This is the network token read from the device.
+        It will be unique for each device.
+        """
+        return self._uuid
 
     @property
     def mac(self) -> str:
-        """Return MAC address of device. Also known as id."""
-        return self._id
+        """Return MAC address of device."""
+        return self._mac
 
     @property
-    def ip(self) -> str:
+    def address(self) -> str:
         """Return IP address of device."""
-        return self._ip
+        return self._address
+
+    @property
+    def available(self) -> bool:
+        """Return True when device is connected and all parameters have been updated."""
+        return self._is_connected and self._first_update
 
     @property
     def connected(self) -> bool:
@@ -346,13 +326,21 @@ class SensemeDevice:
 
     @property
     def device_type(self) -> str:
-        """Return type of device."""
-        return DEVICE_TYPES.get(self._model.upper(), "FAN")
+        """Return type of device.
+
+        If the model is unknown then the default response is a "FAN".
+        """
+        return DEVICE_TYPES.get(self._base_model.upper(), "FAN")
 
     @property
     def model(self) -> str:
         """Return Model of device."""
-        return DEVICE_MODELS.get(self._model.upper(), self._model.upper())
+        return DEVICE_MODELS.get(self._base_model.upper(), self._base_model.upper())
+
+    @property
+    def base_model(self) -> str:
+        """Return Model of device as reported."""
+        return self._base_model
 
     @classmethod
     def models(cls) -> list:
@@ -366,7 +354,7 @@ class SensemeDevice:
     @property
     def is_unknown_model(self) -> bool:
         """Return True if the model is unknown."""
-        return DEVICE_MODELS.get(self._model.upper(), None) is None
+        return DEVICE_MODELS.get(self._base_model.upper(), None) is None
 
     @property
     def fw_version(self) -> str:
@@ -447,15 +435,6 @@ class SensemeDevice:
         return None
 
     @property
-    def network_gateway(self) -> str:
-        """Return the network gateway address of the device."""
-        addresses = self._data.get("NW;PARAMS;ACTUAL", None)
-        if addresses:
-            addresses = addresses.split(";")
-            return addresses[1]
-        return None
-
-    @property
     def network_subnetmask(self) -> str:
         """Return the network gateway address of the device."""
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
@@ -465,22 +444,29 @@ class SensemeDevice:
         return None
 
     @property
+    def network_gateway(self) -> str:
+        """Return the network gateway address of the device."""
+        addresses = self._data.get("NW;PARAMS;ACTUAL", None)
+        if addresses:
+            addresses = addresses.split(";")
+            return addresses[1]
+        return None
+
+    @property
     def network_ssid(self) -> str:
         """Return the wireless SSID the device is connected to."""
         return self._data.get("NW;SSID", None)
 
     @property
     def network_token(self) -> str:
-        """Return the network token of the device."""
-        return self._data.get("NW;TOKEN", None)
+        """Return the network token of the device. This is the same as uuid."""
+        return self._uuid
 
     @property
     def room_status(self) -> bool:
         """Return True if the device is in a room."""
-        room_name = self._data.get("GROUP;LIST", None)
-        room_type = self._data.get("GROUP;ROOM;TYPE", None)
-        if room_name and room_type:
-            return room_name != "EMPTY" and room_type != "0"
+        if self._room_name and self._room_type:
+            return self._room_name != "EMPTY" and self._room_type != "0"
         return None
 
     @property
@@ -489,12 +475,12 @@ class SensemeDevice:
 
         'EMPTY' is returned if not in a group.
         """
-        return self._data.get("GROUP;LIST", None)
+        return self._room_name
 
     @property
     def room_type(self) -> str:
         """Return the room type of the device."""
-        room_type = int(self._data.get("GROUP;ROOM;TYPE", None))
+        room_type = self._room_type
         if room_type:
             if room_type >= len(ROOM_TYPES):
                 room_type = 0
@@ -568,7 +554,7 @@ class SensemeDevice:
         return min_bright, max_bright
 
     @property
-    def motion_sensor(self) -> bool:
+    def motion_detected(self) -> bool:
         """Return True when device motion sensor says room is occupied.
 
         Available on all SenseME fans.
@@ -578,34 +564,122 @@ class SensemeDevice:
             return status == "OCCUPIED"
         return None
 
+    @property
+    def motion_light_auto(self) -> bool:
+        """Return True when light is in automatic on with motion mode."""
+        if not self.has_light:
+            return None
+        state = self._data.get("LIGHT;AUTO", None)
+        if state:
+            return state == "ON"
+        return None
+
+    @motion_light_auto.setter
+    def motion_light_auto(self, state: bool):
+        """Set the light automatic on with motion mode."""
+        if not self.has_light:
+            return
+        state = "ON" if state else "OFF"
+        self._send_command(f"LIGHT;AUTO;{state}")
+
+    @property
+    def sleep_mode(self) -> bool:
+        """Return True when sleep mode is enabled."""
+        state = self._data.get("SLEEP;STATE", None)
+        if state:
+            return state == "ON"
+        return None
+
+    @sleep_mode.setter
+    def sleep_mode(self, state: bool):
+        """Set the sleep mode."""
+        state = "ON" if state else "OFF"
+        self._send_command(f"SLEEP;STATE;{state}")
+
+    async def async_fill_out_info(self) -> bool:
+        """Retrieve info from the SenseME device directly.
+
+        Does not start background tasks to retrieve device/parameter information.
+        This method is a coroutine.
+        """
+        writer = None
+        if self.is_sec_info_complete:
+            return True
+        try:
+            _LOGGER.debug(
+                "Retrieve device information: Connecting to address %s", self.address
+            )
+            reader, writer = await asyncio.open_connection(self._address, PORT)
+            _LOGGER.debug(
+                "Retrieve device information: Status Update from address %s",
+                self.address,
+            )
+            writer.write(f"<{self._address};DEVICE;ID;GET>".encode("utf-8"))
+            writer.write(f"<{self._address};SNSROCC;STATUS;GET>".encode("utf-8"))
+            writer.write(f"<{self._address};GETALL;GET>".encode("utf-8"))
+
+            leftover = ""
+            while True:
+                # socket will throw a timeout error and abort this function if
+                # no proper response is received
+                line = await asyncio.wait_for(reader.readuntil(b")"), 10)
+                leftover = self._process_message(leftover + line.decode("utf-8"))
+                if self._first_update:
+                    return True
+        except asyncio.TimeoutError:
+            _LOGGER.debug(
+                "Retrieve device information: Failed to connect to address %s",
+                self.address,
+            )
+            return False
+        except OSError:
+            _LOGGER.debug(
+                "%s: Retrieve device information: Error\n%s",
+                self.address,
+                traceback.format_exc(),
+            )
+            return False
+        finally:
+            # close the socket
+            if writer is not None:
+                _LOGGER.debug(
+                    "Retrieve device information: Disconnecting from address %s",
+                    self.address,
+                )
+                writer.close()
+                await writer.wait_closed()
+
     def add_callback(self, callback: Callable):
         """Add callback function/coroutine. Called when parameters are updated."""
         if callback not in self._callbacks:
             self._callbacks.append(callback)
             if inspect.iscoroutinefunction(callback):
-                _LOGGER.debug("%s: Added coroutine callback", self._name)
+                _LOGGER.debug("%s: Added coroutine callback", self.name)
             else:
-                _LOGGER.debug("%s: Added function callback", self._name)
+                _LOGGER.debug("%s: Added function callback", self.name)
 
     def remove_callback(self, callback):
         """Remove existing callback function/coroutine."""
         if callback in self._callbacks:
             self._callbacks.remove(callback)
-            _LOGGER.debug("%s: Removed callback", self._name)
+            _LOGGER.debug("%s: Removed callback", self.name)
 
-    async def update(self) -> bool:
+    async def async_update(self, connection_lost=False, timeout_seconds=10) -> bool:
         """Wait for first update of all parameters in SenseME device.
 
+        If connection_lost is True this connect will be treated as a reconnect.
+        If timeout_seconds is how long this method will wait for a response
+        before timing out. The Device will be started if not already.
         This method is a coroutine.
         """
-        if self._first_update:
-            return True
-        if self._is_running is False:
+        if connection_lost:
+            self._connection_lost = True
+        if not self._is_running:
             self.start()
         start = int(time.time())
-        while not self._first_update:
-            await asyncio.sleep(0.01)
-            if int(time.time()) - start >= 5:
+        while not self.available:
+            await asyncio.sleep(0.1)
+            if int(time.time()) - start >= timeout_seconds:
                 return False
         return True
 
@@ -619,17 +693,111 @@ class SensemeDevice:
 
     def _send_command(self, cmd):
         """Send a command to SenseME device."""
-        msg = f"<{self._name};{cmd}>"
+        msg = f"<{self.mac};{cmd}>"
         self._endpoint.send(msg)
-        # _LOGGER.debug("%s: Command sent '%s'", self._name, cmd)
+        # _LOGGER.debug("%s: Command sent '%s'", self.name, cmd)
 
-    def _update_status(self):
-        """Issues commands to get complete status from device."""
-        _LOGGER.debug("%s: Status update", self._name)
-        self._send_command("GETALL")
-        # GETALL doesn't return the status of the motion detector,
-        # so also request the motion detector status
+    def _process_message(self, line) -> str:
+        """Process messages from device.
+
+        May contain multiple responses in one line string.
+        Last response may be a partial so it is returned.
+        This partial should be added to next line.
+        """
+        # The line received may have multiple parenthesized responses
+        # Split them and process each individual message.
+        # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
+        # then split on the '|'
+        for msg in line.replace(")(", ")|(").split("|"):
+            if msg[-1] != ")":
+                return msg
+            # remove begining '(' and ending ')' from string
+            # also extract name if undefined
+            name, result = msg[1:-1].split(";", 1)
+            if self._name != name:
+                self._data["NAME;VALUE"] = name
+                self._name = name
+            # most messages have only one value at the end
+            valuecount = 1
+            if "BOOKENDS" in result:
+                valuecount = 2
+            elif "NW;PARAMS;ACTUAL" in result:
+                valuecount = 3
+            elif "DEVICE;LIGHT" in result:
+                valuecount = len(result.split(";")) - 2
+            elif "DEVICE;ID" in result:
+                valuecount = 2
+            # split on ';' and the associate the correct number of values
+            values = result.split(";")
+            key = ";".join(values[:-valuecount])
+            value = ";".join(values[-valuecount:])
+            if key == "ERROR":
+                _LOGGER.error(
+                    "%s: Command error response",
+                    self.name,
+                )
+                continue
+            if key == "TIME;VALUE":
+                # ignore time parameter
+                continue
+            if self._data.get(key, "?????") == value:
+                # parameter is the same value
+                continue
+            if self.is_fan:
+                if key == "WINTERMODE;STATE":
+                    self._first_update = True
+            elif self.is_light:
+                if key == "SNSROCC;TIMEOUT;MIN":
+                    self._first_update = True
+            elif not self.is_fan and not self.is_light:
+                if key == "SNSROCC;TIMEOUT;MIN":
+                    self._first_update = True
+            self._data[key] = value
+            _LOGGER.debug(
+                "%s: Param updated: [%s]='%s'",
+                self.name,
+                key,
+                value,
+            )
+            # update certain local variables that are not part of data
+            if key == "FW;NAME":
+                self._fw_name = value
+            elif key == ("FW;" + self._fw_name):
+                self._fw_version = value
+            elif key == "DEVICE;LIGHT":
+                if self._has_light is None:
+                    value = value.upper()
+                    self._has_light = value in ("PRESENT", "PRESENT;COLOR")
+            elif key == "NW;TOKEN":
+                self._uuid = value.lower()
+            elif key == "NAME;VALUE":
+                self._name = value
+            elif key == "GROUP;LIST":
+                self._room_name = value
+            elif key == "GROUP;ROOM;TYPE":
+                self._room_type = int(value)
+            elif key == "DEVICE;ID":
+                self._mac, self._base_model = value.split(";")
+                if self.model in ["Haiku Fan", "Haiku Light"]:
+                    self._has_sensor = True
+                elif self.model == "Haiku L Fan":
+                    # determined by "DEVICE;OPTION;SENSORS" below
+                    self._has_sensor = None
+                else:
+                    self._has_sensor = False
+            elif key == "DEVICE;OPTION;SENSORS":
+                if self._has_sensor is None:
+                    value = value.upper()
+                    self._has_sensor = value == "PRESENT"
+
+        return ""
+
+    def _send_update(self):
+        """Sends update commands to an already connected device."""
+        self._send_command("DEVICE;ID;GET")
         self._send_command("SNSROCC;STATUS;GET")
+        self._send_command("GETALL")
+        _LOGGER.debug("%s: Status update", self.name)
 
     async def _updater(self):
         """Periodically update device parameters.
@@ -638,35 +806,36 @@ class SensemeDevice:
         """
         while True:
             try:
-                self._update_status()
+                self._send_update()
                 await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
             except asyncio.CancelledError:
-                _LOGGER.debug("%s: Updater task cancelled", self._name)
+                _LOGGER.debug("%s: Updater task cancelled", self.name)
                 return
             except OSError:
                 _LOGGER.debug(
-                    "%s: Updater task error\n%s", self._name, traceback.format_exc()
+                    "%s: Updater task error\n%s", self.name, traceback.format_exc()
                 )
                 await asyncio.sleep(self.refresh_minutes * 60 + random.uniform(-10, 10))
             except Exception:
                 _LOGGER.error(
                     "%s: Unhandled updater task error\n%s",
-                    self._name,
+                    self.name,
                     traceback.format_exc(),
                 )
                 await asyncio.sleep(10)
                 raise
-        _LOGGER.error("%s: Updater task ended", self._name)
 
     async def _listener(self):
         """Task that listens for device status changes.
 
+        Maintains an open socket to the device at all times.
+        Lost connections are automatically reconnected.
         This method is a coroutine.
         """
         while True:
             try:
                 if self._error_count > 10:
-                    _LOGGER.error("%s: Listener task too many errors", self._name)
+                    _LOGGER.error("%s: Listener task too many errors", self.name)
                     self._is_connected = False
                     self._execute_callbacks()
                     self._updater_task.cancel()
@@ -679,130 +848,86 @@ class SensemeDevice:
                     self._execute_callbacks()
                     self._endpoint = SensemeEndpoint()
                     try:
-                        _LOGGER.debug("%s: Connecting", self._name)
+                        _LOGGER.debug("%s: Connecting", self.name)
                         await asyncio.get_running_loop().create_connection(
                             lambda: SensemeProtocol(self._name, self._endpoint),
-                            self._ip,
+                            self._address,
                             PORT,
                         )
+                        _LOGGER.debug("%s: Creating Updater Task", self.name)
+                        self._updater_task = asyncio.create_task(self._updater())
+                        self._error_count = 0
+                        self._is_connected = True
+                        if self._connection_lost:
+                            _LOGGER.warning(
+                                "%s: Connection to address %s restored",
+                                self.name,
+                                self.address,
+                            )
+                            self._connection_lost = False
+                        else:
+                            _LOGGER.debug(
+                                "%s: Connection to address %s successful",
+                                self.name,
+                                self.address,
+                            )
                     except OSError:
                         _LOGGER.debug(
-                            "%s: Connect failed, " "try again in a minute\n%s",
-                            self._name,
+                            "%s: Connect failed, try again in a minute\n%s",
+                            self.name,
                             traceback.format_exc(),
                         )
                         self._endpoint = None
                         await asyncio.sleep(60)
                         continue
-                    self._updater_task = asyncio.create_task(self._updater())
-                    self._error_count = 0
-                    self._is_connected = True
-                    self._execute_callbacks()
                 data = await self._endpoint.receive()
                 if data is None:
                     # endpoint is closed, let task know it's time open another
-                    _LOGGER.warning("%s: Connection lost", self._name)
+                    _LOGGER.warning(
+                        "%s: Connection to address %s lost", self.name, self.address
+                    )
+                    self._data = dict()
                     self._is_connected = False
+                    self._first_update = False
+                    self._connection_lost = True
                     self._execute_callbacks()  # tell callbacks we disconnected
                     self._endpoint = None
                     self._updater_task.cancel()
                     await asyncio.sleep(1)
                     continue
-                # add previous partial data to new data
-                data = self._leftover + data
-                self._leftover = ""
-                # The data received may have multiple parenthesized data
-                # points. Split them and put each individual message onto the
-                # queue. Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
-                # then split on the '|'
-                for msg in data.replace(")(", ")|(").split("|"):
-                    if msg[-1] != ")":
-                        self._leftover = msg
-                        continue
-                    # remove '(device name' at the beginning and the ')'
-                    # at the end of the string
-                    _, result = msg[:-1].split(";", 1)
-                    # most messages have only one value at the end
-                    valuecount = 1
-                    if "BOOKENDS" in result:
-                        valuecount = 2
-                    elif "NW;PARAMS;ACTUAL" in result:
-                        valuecount = 3
-                    elif "DEVICE;LIGHT" in result:
-                        valuecount = len(result.split(";")) - 2
-                    # split on ';' and the associate the correct
-                    # number of values
-                    values = result.split(";")
-                    key = ";".join(values[:-valuecount])
-                    value = ";".join(values[-valuecount:])
-                    if key == "ERROR":
-                        _LOGGER.error(
-                            "%s: Command error response: '%s'",
-                            self._name,
-                            value,
-                        )
-                        continue
-                    if key == "TIME;VALUE":
-                        # ignore time parameter
-                        continue
-                    if self._data.get(key, "?????") == value:
-                        # parameter is the same value
-                        continue
-                    if key == "SNSROCC;TIMEOUT;MIN":
-                        # first update complete when SNSROCC;TIMEOUT;MIN is received
-                        # last parameter common to both Haiku Fan and Haiku Light
-                        self._first_update = True
-                    self._data[key] = value
-                    _LOGGER.debug(
-                        "%s: Param updated: [%s]='%s'",
-                        self._name,
-                        key,
-                        value,
-                    )
-                    # update certain local variables that are not part of data
-                    if key == "FW;NAME":
-                        self._fw_name = value
-                    elif key == ("FW;" + self._fw_name):
-                        self._fw_version = value
-                    elif key == "DEVICE;LIGHT":
-                        if self._has_light is None:
-                            value = value.upper()
-                            self._has_light = value in ("PRESENT", "PRESENT;COLOR")
-                    elif key == "GROUP;LIST":
-                        self._room_name = value
-                    elif key == "DEVICE;OPTION;SENSORS":
-                        if self._has_sensor is None:
-                            value = value.upper()
-                            self._has_sensor = value == "PRESENT"
-                    self._execute_callbacks()
+                # add previous partial data to new data and process
+                self._leftover = self._process_message(self._leftover + data)
+                self._execute_callbacks()
             except asyncio.CancelledError:
-                _LOGGER.debug("%s: Listener task cancelled", self._name)
+                _LOGGER.debug("%s: Listener task cancelled", self.name)
                 return
             except OSError:
                 _LOGGER.debug(
-                    "%s: Listener task\n%s", self._name, traceback.format_exc()
+                    "%s: Listener task\n%s", self.name, traceback.format_exc()
                 )
                 self._error_count += 1
                 await asyncio.sleep(1)
             except Exception:
                 _LOGGER.error(
-                    "%s: Listener task error\n%s", self._name, traceback.format_exc()
+                    "%s: Listener task error\n%s", self.name, traceback.format_exc()
                 )
                 raise
-        _LOGGER.error("%s: Listener task ended", self._name)
+        _LOGGER.error("%s: Listener task ended", self.name)
 
     def start(self):
         """Start the async task to handle responses from the device."""
         if not self._is_running:
             self._listener_task = asyncio.create_task(self._listener())
             self._is_running = True
-            _LOGGER.debug("%s: Started", self._name)
+            _LOGGER.debug("%s: Started", self.name)
 
     def stop(self):
         """Signals thread to stop and returns immediately."""
         if self._is_running is True:
-            self._listener_task.cancel()
-            self._updater_task.cancel()
+            if self._listener_task is not None:
+                self._listener_task.cancel()
+            if self._updater_task is not None:
+                self._updater_task.cancel()
             self._is_running = False
 
 
@@ -814,9 +939,10 @@ class SensemeFan(SensemeDevice):
         string = f"Name: {self._name}"
         if self._room_name is not None:
             string += f", Room Name: {self._room_name}"
-        string += f", ID: {self._id}"
-        string += f", IP: {self._ip}"
         string += f", Model: {self.model}"
+        string += f", UUID: {self._uuid}"
+        string += f", IP: {self._address}"
+        string += f", MAC: {self._mac}"
         if self._fw_version is not None:
             string += f", FW Version: {self._fw_version}"
         if self._has_light is not None:
@@ -881,6 +1007,11 @@ class SensemeFan(SensemeDevice):
         return None
 
     @property
+    def fan_speed_limits(self) -> Tuple:
+        """Return a tuple of the min/max fan speeds."""
+        return self.fan_speed_min, self.fan_speed_max
+
+    @property
     def fan_speed_limits_room(self) -> Tuple:
         """Return a tuple of the min/max fan speeds the room is configured to support.
 
@@ -921,15 +1052,15 @@ class SensemeFan(SensemeDevice):
         self._send_command(f"FAN;DIR;SET;{direction}")
 
     @property
-    def fan_whoosh(self) -> bool:
+    def fan_whoosh_mode(self) -> bool:
         """Return True when fan whoosh mode is on."""
         state = self._data.get("FAN;WHOOSH;STATUS", None)
         if state:
             return state == "ON"
         return None
 
-    @fan_whoosh.setter
-    def fan_whoosh(self, state: bool):
+    @fan_whoosh_mode.setter
+    def fan_whoosh_mode(self, state: bool):
         """Set the fan whoosh mode."""
         value = "ON" if state else "OFF"
         self._send_command(f"FAN;WHOOSH;{value}")
@@ -938,10 +1069,10 @@ class SensemeFan(SensemeDevice):
     def fan_autocomfort(self) -> str:
         """Get the auto comfort mode from the fan.
 
-        'OFF' no automatic adjustment.
-        'COOLING' increases fan speed as temp increases.
+        'OFF' no automatic adjustment,
+        'COOLING' increases fan speed as temp increases,
         'HEATING' means slow mixing of air while room is occupied and faster mix speeds
-                  while room is not occupied.
+        while room is not occupied.
         'FOLLOWTSTAT' means change between 'COOLING' and 'HEATING based on thermostat.
         """
         return self._data.get("SMARTMODE;STATE", None)
@@ -953,7 +1084,7 @@ class SensemeFan(SensemeDevice):
         'OFF' no automatic adjustment.
         'COOLING' increases fan speed as temp increases.
         'HEATING' means slow mixing of air while room is occupied and faster mix speeds
-                  while room is not occupied.
+        while room is not occupied.
         'FOLLOWTSTAT' means change between 'COOLING' and 'HEATING based on thermostat.
         """
         value = "ON" if state else "OFF"
@@ -1001,21 +1132,7 @@ class SensemeFan(SensemeDevice):
     def motion_fan_auto(self, state: bool):
         """Set the fan automatic on with motion mode."""
         state = "ON" if state else "OFF"
-        self._send_command(f";FAN;AUTO;{state}")
-
-    @property
-    def motion_light_auto(self) -> bool:
-        """Return True when light is in automatic on with motion mode."""
-        state = self._data.get(";LIGHT;AUTO", None)
-        if state:
-            return state == "ON"
-        return None
-
-    @motion_light_auto.setter
-    def motion_light_auto(self, state: bool):
-        """Set the light automatic on with motion mode."""
-        state = "ON" if state else "OFF"
-        self._send_command(f";LIGHT;AUTO;{state}")
+        self._send_command(f"FAN;AUTO;{state}")
 
 
 class SensemeLight(SensemeDevice):
@@ -1026,12 +1143,12 @@ class SensemeLight(SensemeDevice):
         string = f"Name: {self._name}"
         if self._room_name is not None:
             string += f", Room Name: {self._room_name}"
-        string += f", ID: {self._id}"
-        string += f", IP: {self._ip}"
         string += f", Model: {self.model}"
+        string += f", UUID: {self._uuid}"
+        string += f", IP: {self._address}"
+        string += f", MAC: {self._mac}"
         if self._fw_version is not None:
             string += f", FW Version: {self._fw_version}"
-
         return string
 
     @property

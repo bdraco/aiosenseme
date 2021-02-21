@@ -1,5 +1,34 @@
 # Changelog for aiosenseme library
 
+## v0.5.0
+
+* Devices can now be added with an IP address instead of being discovered. Some network configurations will not allow UDP Discovery packets through but a direct TCP connection will work.
+* Add support for locating a fan by IP address in the command line.
+* Added additional error checking on Discovery listener sockets.
+* Changed the reconnect logic slightly. SensemeDevice will now force an update of all parameters when reconnected.
+* API breaking changes.
+  * In the SensemeDevice constructor the 'id' parameter changed to 'mac, 'ip' is now 'address', and 'model' is now 'base_model'.
+  * SensemeFan.fan_whoosh property is now SensemeFan.fan_whoosh_mode.
+  * SensemeDevice.id property has been removed. Use SensemeDevice.mac property instead.
+  * SensemeDevice.motion_sensor property changed to SensemeDevice.motion_detected.
+* API additions
+  * SensemeDevice.get_device_info property returns a dictionary with key SenseME device information.
+  * SensemeDevice constructor now has an 'info' parameter. You can use the dict obtained from SensemeDevice.get_device_info property.
+  * SensemeDevice.available property indicates when the device is connected and the first parameter update is complete.
+  * SensemeDevice.mac property gets the MAC address of the device.
+  * SensemeDevice.uuid property gets the Network Token (UUID) obtained from the device.
+  * SensemeDevice.base_model property gets the model of the device as returned by the device. SensemeDevice.model property gets the prettier formatted model name.
+  * SensemeDiscovery.add_by_device_info(info) allows you to add a device by info dict obtained by SensemeDevice.get_device_info. It will be added to the discovery device list just like it was discovered. This works for both fans and lights.
+  * SensemeDiscovery.add_by_ip_address(address) allows you to add a device by IP address. It will be added to the discovery device list just like it was discovered. This works for both fans and lights.
+  * aiosenseme.async_get_device_by_device_info(info) connects to and returns a device using and info dict obtained by SensemeDevice.get_device_info. This method returns an appropriate SensemeFan or SensemeLight object.
+  * aiosenseme.async_get_device_by_ip_address(address) connects to a device via the specified IP address, determines key information and returns an appropriate SensemeFan or SensemeLight object.
+  * SensemeFan.sleep_mode property sets/gets the current sleep mode in the device.
+  * SensemeFan.fan_speed_limits property. Gets a Tuple of both fan speed minimum and fan speed maximum.
+* Command line changes
+  * Added -i/--ip option to connect to fans directly without using discovery.
+  * Added -j/--json option to output fan information and state as json.
+  * -n/--name no longer matches on room name also.
+
 ## v0.4.5
 
 * Fix error when cancelling the listener task of a device when stop() is called. Thanks to [briantho](https://github.com/briantho) for bringing this to my attention.
