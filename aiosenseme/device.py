@@ -696,10 +696,14 @@ class SensemeDevice:
 
     def _execute_callbacks(self):
         """Run all callbacks to indicate something has changed."""
+        count = 0
         for callback in self._callbacks:
+            count += 1
             callback()
         for callback in self._coroutine_callbacks:
+            count += 1
             asyncio.create_task(callback())
+        _LOGGER.debug("%s: %s callback(s) happened.", self.name, count)
 
     def _send_command(self, cmd):
         """Send a command to SenseME device."""
@@ -752,26 +756,27 @@ class SensemeDevice:
                 # ignore time parameter
                 continue
             if self._data.get(key, INVALID_DATA) == value:
-                # parameter is the same value
+                # parameter has not changed, nothing to do
                 continue
+            self._data[key] = value # update new key/value or changed value
+            _LOGGER.debug("%s: Param updated: [%s]='%s'", self.name, key, value)
             if self.is_fan:
                 if key == "WINTERMODE;STATE":
-                    self._first_update = True
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
             elif self.is_light:
                 if key == "SNSROCC;TIMEOUT;MIN":
-                    self._first_update = True
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
             elif not self.is_fan and not self.is_light:
                 if key == "SNSROCC;TIMEOUT;MIN":
-                    self._first_update = True
-            if key not in self._data or self._data[key] != value:
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
+            if self._first_update:
                 data_changed = True
-            self._data[key] = value
-            _LOGGER.debug(
-                "%s: Param updated: [%s]='%s'",
-                self.name,
-                key,
-                value,
-            )
             # update certain local variables that are not part of data
             if key == "FW;NAME":
                 self._fw_name = value
@@ -802,7 +807,6 @@ class SensemeDevice:
                 if self._has_sensor is None:
                     value = value.upper()
                     self._has_sensor = value == "PRESENT"
-
         return "", data_changed
 
     def _send_update(self):
