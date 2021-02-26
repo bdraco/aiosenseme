@@ -624,7 +624,7 @@ class SensemeDevice:
                 # socket will throw a timeout error and abort this function if
                 # no proper response is received
                 line = await asyncio.wait_for(reader.readuntil(b")"), 10)
-                leftover = self._process_message(leftover + line.decode("utf-8"))
+                leftover, _ = self._process_message(leftover + line.decode("utf-8"))
                 if self._first_update:
                     return True
         except asyncio.TimeoutError:
@@ -713,6 +713,7 @@ class SensemeDevice:
         Last response may be a partial so it is returned.
         This partial should be added to next line.
         """
+        data_changed = False
         # The line received may have multiple parenthesized responses
         # Split them and process each individual message.
         # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
@@ -761,6 +762,8 @@ class SensemeDevice:
             elif not self.is_fan and not self.is_light:
                 if key == "SNSROCC;TIMEOUT;MIN":
                     self._first_update = True
+            if key not in self._data or self._data[key] != value:
+                data_changed = True
             self._data[key] = value
             _LOGGER.debug(
                 "%s: Param updated: [%s]='%s'",
@@ -799,7 +802,7 @@ class SensemeDevice:
                     value = value.upper()
                     self._has_sensor = value == "PRESENT"
 
-        return ""
+        return "", data_changed
 
     def _send_update(self):
         """Sends update commands to an already connected device."""
@@ -905,8 +908,11 @@ class SensemeDevice:
                     await asyncio.sleep(1)
                     continue
                 # add previous partial data to new data and process
-                self._leftover = self._process_message(self._leftover + data)
-                self._execute_callbacks()
+                self._leftover, data_changed = self._process_message(
+                    self._leftover + data
+                )
+                if data_changed:
+                    self._execute_callbacks()
             except asyncio.CancelledError:
                 _LOGGER.debug("%s: Listener task cancelled", self.name)
                 return
