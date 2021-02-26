@@ -215,6 +215,7 @@ class SensemeDevice:
         self._error_count = 0
         self._leftover = ""
         self._callbacks = []
+        self._coroutine_callbacks = []
         self._first_update = False
 
     def __eq__(self, other: Any) -> bool:
@@ -651,18 +652,27 @@ class SensemeDevice:
 
     def add_callback(self, callback: Callable):
         """Add callback function/coroutine. Called when parameters are updated."""
+        is_coroutine = inspect.iscoroutinefunction(callback)
+        if is_coroutine:
+            if callback not in self._coroutine_callbacks:
+                self._coroutine_callbacks.append(callback)
+            _LOGGER.debug("%s: Added coroutine callback", self.name)
+            return
+
         if callback not in self._callbacks:
             self._callbacks.append(callback)
-            if inspect.iscoroutinefunction(callback):
-                _LOGGER.debug("%s: Added coroutine callback", self.name)
-            else:
-                _LOGGER.debug("%s: Added function callback", self.name)
+        _LOGGER.debug("%s: Added function callback", self.name)
 
     def remove_callback(self, callback):
         """Remove existing callback function/coroutine."""
+        if callback in self._coroutine_callbacks:
+            self._coroutine_callbacks.remove(callback)
+            _LOGGER.debug("%s: Removed coroutine callback", self.name)
+            return
         if callback in self._callbacks:
             self._callbacks.remove(callback)
-            _LOGGER.debug("%s: Removed callback", self.name)
+            _LOGGER.debug("%s: Removed function callback", self.name)
+            return
 
     async def async_update(self, connection_lost=False, timeout_seconds=10) -> bool:
         """Wait for first update of all parameters in SenseME device.
@@ -686,10 +696,9 @@ class SensemeDevice:
     def _execute_callbacks(self):
         """Run all callbacks to indicate something has changed."""
         for callback in self._callbacks:
-            if inspect.iscoroutinefunction(callback):
-                asyncio.create_task(callback())
-            else:
-                callback()
+            callback()
+        for callback in self._coroutine_callbacks:
+            asyncio.create_task(callback())
 
     def _send_command(self, cmd):
         """Send a command to SenseME device."""
