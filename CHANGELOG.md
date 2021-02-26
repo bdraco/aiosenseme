@@ -1,5 +1,11 @@
 # Changelog for aiosenseme library
 
+## v0.5.1
+
+* Determine a callback type (coroutine or function) only when adding the callback. The reduces overhead in callbacks.
+* Callbacks are stopped when the device is waiting for the first update and can only occur when a parameter has changed. Callback frequency has been significantly reduced.
+* Thanks go to [bdraco](https://github.com/bdraco) for help in making these changes.
+
 ## v0.5.0
 
 * Devices can now be added with an IP address instead of being discovered. Some network configurations will not allow UDP Discovery packets through but a direct TCP connection will work.

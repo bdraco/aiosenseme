@@ -30,7 +30,7 @@ PORT = 31415
 ONOFF = ["ON", "OFF"]
 DIRECTIONS = ["FWD", "REV"]
 AUTOCOMFORTS = ["OFF", "COOLING", "HEATING", "FOLLOWTSTAT"]
-INVALID_DATA = "?????"  # data we never expect to be send by the device
+INVALID_DATA = "?????"  # data we never expect to be sent by the device
 ROOM_TYPES = [
     "Undefined",  # 0, not in a room
     "Other",  # 1
@@ -856,7 +856,6 @@ class SensemeDevice:
                 if self._error_count > 10:
                     _LOGGER.error("%s: Listener task too many errors", self.name)
                     self._is_connected = False
-                    self._execute_callbacks()
                     self._updater_task.cancel()
                     if self._endpoint is not None:
                         self._endpoint.close()
@@ -864,7 +863,6 @@ class SensemeDevice:
                     break
                 if self._endpoint is None:
                     self._is_connected = False
-                    self._execute_callbacks()
                     self._endpoint = SensemeEndpoint()
                     try:
                         _LOGGER.debug("%s: Connecting", self.name)
