@@ -30,6 +30,7 @@ PORT = 31415
 ONOFF = ["ON", "OFF"]
 DIRECTIONS = ["FWD", "REV"]
 AUTOCOMFORTS = ["OFF", "COOLING", "HEATING", "FOLLOWTSTAT"]
+INVALID_DATA = "?????"  # data we never expect to be sent by the device
 ROOM_TYPES = [
     "Undefined",  # 0, not in a room
     "Other",  # 1
@@ -79,6 +80,8 @@ DEVICE_TYPES = {
 IGNORE_MODELS = [
     "SWITCH,SENSEME",
 ]
+
+SUPPRESS_CALLBACK_PARAMS = {"SLEEP;EVENT"}
 
 
 class SensemeEndpoint:
@@ -215,6 +218,7 @@ class SensemeDevice:
         self._error_count = 0
         self._leftover = ""
         self._callbacks = []
+        self._coroutine_callbacks = []
         self._first_update = False
 
     def __eq__(self, other: Any) -> bool:
@@ -623,7 +627,7 @@ class SensemeDevice:
                 # socket will throw a timeout error and abort this function if
                 # no proper response is received
                 line = await asyncio.wait_for(reader.readuntil(b")"), 10)
-                leftover = self._process_message(leftover + line.decode("utf-8"))
+                leftover, _ = self._process_message(leftover + line.decode("utf-8"))
                 if self._first_update:
                     return True
         except asyncio.TimeoutError:
@@ -651,18 +655,27 @@ class SensemeDevice:
 
     def add_callback(self, callback: Callable):
         """Add callback function/coroutine. Called when parameters are updated."""
+        is_coroutine = inspect.iscoroutinefunction(callback)
+        if is_coroutine:
+            if callback not in self._coroutine_callbacks:
+                self._coroutine_callbacks.append(callback)
+            _LOGGER.debug("%s: Added coroutine callback", self.name)
+            return
+
         if callback not in self._callbacks:
             self._callbacks.append(callback)
-            if inspect.iscoroutinefunction(callback):
-                _LOGGER.debug("%s: Added coroutine callback", self.name)
-            else:
-                _LOGGER.debug("%s: Added function callback", self.name)
+        _LOGGER.debug("%s: Added function callback", self.name)
 
     def remove_callback(self, callback):
         """Remove existing callback function/coroutine."""
+        if callback in self._coroutine_callbacks:
+            self._coroutine_callbacks.remove(callback)
+            _LOGGER.debug("%s: Removed coroutine callback", self.name)
+            return
         if callback in self._callbacks:
             self._callbacks.remove(callback)
-            _LOGGER.debug("%s: Removed callback", self.name)
+            _LOGGER.debug("%s: Removed function callback", self.name)
+            return
 
     async def async_update(self, connection_lost=False, timeout_seconds=10) -> bool:
         """Wait for first update of all parameters in SenseME device.
@@ -685,11 +698,14 @@ class SensemeDevice:
 
     def _execute_callbacks(self):
         """Run all callbacks to indicate something has changed."""
+        count = 0
         for callback in self._callbacks:
-            if inspect.iscoroutinefunction(callback):
-                asyncio.create_task(callback())
-            else:
-                callback()
+            count += 1
+            callback()
+        for callback in self._coroutine_callbacks:
+            count += 1
+            asyncio.create_task(callback())
+        _LOGGER.debug("%s: %s callback(s) happened.", self.name, count)
 
     def _send_command(self, cmd):
         """Send a command to SenseME device."""
@@ -704,6 +720,7 @@ class SensemeDevice:
         Last response may be a partial so it is returned.
         This partial should be added to next line.
         """
+        should_callback = False
         # The line received may have multiple parenthesized responses
         # Split them and process each individual message.
         # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
@@ -740,25 +757,28 @@ class SensemeDevice:
             if key == "TIME;VALUE":
                 # ignore time parameter
                 continue
-            if self._data.get(key, "?????") == value:
-                # parameter is the same value
+            if self._data.get(key, INVALID_DATA) == value:
+                # parameter has not changed, nothing to do
                 continue
+            self._data[key] = value  # update new key/value or changed value
+            _LOGGER.debug("%s: Param updated: [%s]='%s'", self.name, key, value)
             if self.is_fan:
                 if key == "WINTERMODE;STATE":
-                    self._first_update = True
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
             elif self.is_light:
                 if key == "SNSROCC;TIMEOUT;MIN":
-                    self._first_update = True
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
             elif not self.is_fan and not self.is_light:
                 if key == "SNSROCC;TIMEOUT;MIN":
-                    self._first_update = True
-            self._data[key] = value
-            _LOGGER.debug(
-                "%s: Param updated: [%s]='%s'",
-                self.name,
-                key,
-                value,
-            )
+                    if not self._first_update:
+                        self._first_update = True
+                        _LOGGER.debug("%s: First Update Complete", self.name)
+            if self._first_update and key not in SUPPRESS_CALLBACK_PARAMS:
+                should_callback = True
             # update certain local variables that are not part of data
             if key == "FW;NAME":
                 self._fw_name = value
@@ -789,8 +809,7 @@ class SensemeDevice:
                 if self._has_sensor is None:
                     value = value.upper()
                     self._has_sensor = value == "PRESENT"
-
-        return ""
+        return "", should_callback
 
     def _send_update(self):
         """Sends update commands to an already connected device."""
@@ -837,7 +856,6 @@ class SensemeDevice:
                 if self._error_count > 10:
                     _LOGGER.error("%s: Listener task too many errors", self.name)
                     self._is_connected = False
-                    self._execute_callbacks()
                     self._updater_task.cancel()
                     if self._endpoint is not None:
                         self._endpoint.close()
@@ -845,7 +863,6 @@ class SensemeDevice:
                     break
                 if self._endpoint is None:
                     self._is_connected = False
-                    self._execute_callbacks()
                     self._endpoint = SensemeEndpoint()
                     try:
                         _LOGGER.debug("%s: Connecting", self.name)
@@ -896,8 +913,11 @@ class SensemeDevice:
                     await asyncio.sleep(1)
                     continue
                 # add previous partial data to new data and process
-                self._leftover = self._process_message(self._leftover + data)
-                self._execute_callbacks()
+                self._leftover, should_callback = self._process_message(
+                    self._leftover + data
+                )
+                if should_callback:
+                    self._execute_callbacks()
             except asyncio.CancelledError:
                 _LOGGER.debug("%s: Listener task cancelled", self.name)
                 return
