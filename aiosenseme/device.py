@@ -30,6 +30,7 @@ PORT = 31415
 ONOFF = ["ON", "OFF"]
 DIRECTIONS = ["FWD", "REV"]
 AUTOCOMFORTS = ["OFF", "COOLING", "HEATING", "FOLLOWTSTAT"]
+INVALID_DATA = "?????"  # data we never expect to be send by the device
 ROOM_TYPES = [
     "Undefined",  # 0, not in a room
     "Other",  # 1
@@ -750,7 +751,7 @@ class SensemeDevice:
             if key == "TIME;VALUE":
                 # ignore time parameter
                 continue
-            if self._data.get(key, "?????") == value:
+            if self._data.get(key, INVALID_DATA) == value:
                 # parameter is the same value
                 continue
             if self.is_fan:
