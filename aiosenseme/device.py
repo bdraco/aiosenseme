@@ -758,7 +758,7 @@ class SensemeDevice:
             if self._data.get(key, INVALID_DATA) == value:
                 # parameter has not changed, nothing to do
                 continue
-            self._data[key] = value # update new key/value or changed value
+            self._data[key] = value  # update new key/value or changed value
             _LOGGER.debug("%s: Param updated: [%s]='%s'", self.name, key, value)
             if self.is_fan:
                 if key == "WINTERMODE;STATE":
