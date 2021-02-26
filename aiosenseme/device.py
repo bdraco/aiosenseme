@@ -81,6 +81,8 @@ IGNORE_MODELS = [
     "SWITCH,SENSEME",
 ]
 
+SUPPRESS_CALLBACK_PARAMS = {"SLEEP;EVENT"}
+
 
 class SensemeEndpoint:
     """High-level endpoint for SenseME protocol."""
@@ -718,7 +720,7 @@ class SensemeDevice:
         Last response may be a partial so it is returned.
         This partial should be added to next line.
         """
-        data_changed = False
+        should_callback = False
         # The line received may have multiple parenthesized responses
         # Split them and process each individual message.
         # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
@@ -775,8 +777,8 @@ class SensemeDevice:
                     if not self._first_update:
                         self._first_update = True
                         _LOGGER.debug("%s: First Update Complete", self.name)
-            if self._first_update:
-                data_changed = True
+            if self._first_update and key not in SUPPRESS_CALLBACK_PARAMS:
+                should_callback = True
             # update certain local variables that are not part of data
             if key == "FW;NAME":
                 self._fw_name = value
@@ -807,7 +809,7 @@ class SensemeDevice:
                 if self._has_sensor is None:
                     value = value.upper()
                     self._has_sensor = value == "PRESENT"
-        return "", data_changed
+        return "", should_callback
 
     def _send_update(self):
         """Sends update commands to an already connected device."""
@@ -913,10 +915,10 @@ class SensemeDevice:
                     await asyncio.sleep(1)
                     continue
                 # add previous partial data to new data and process
-                self._leftover, data_changed = self._process_message(
+                self._leftover, should_callback = self._process_message(
                     self._leftover + data
                 )
-                if data_changed:
+                if should_callback:
                     self._execute_callbacks()
             except asyncio.CancelledError:
                 _LOGGER.debug("%s: Listener task cancelled", self.name)
