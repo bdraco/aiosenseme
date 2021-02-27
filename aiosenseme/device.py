@@ -731,7 +731,7 @@ class SensemeDevice:
             # remove begining '(' and ending ')' from string
             # also extract name if undefined
             name, result = msg[1:-1].split(";", 1)
-            if self._name != name:
+            if self._name is None:
                 self._data["NAME;VALUE"] = name
                 self._name = name
             # most messages have only one value at the end
@@ -767,12 +767,7 @@ class SensemeDevice:
                     if not self._first_update:
                         self._first_update = True
                         _LOGGER.debug("%s: First Update Complete", self.name)
-            elif self.is_light:
-                if key == "SNSROCC;TIMEOUT;MIN":
-                    if not self._first_update:
-                        self._first_update = True
-                        _LOGGER.debug("%s: First Update Complete", self.name)
-            elif not self.is_fan and not self.is_light:
+            else:
                 if key == "SNSROCC;TIMEOUT;MIN":
                     if not self._first_update:
                         self._first_update = True
