@@ -727,7 +727,7 @@ class SensemeDevice:
         # then split on the '|'
         for msg in line.replace(")(", ")|(").split("|"):
             if msg[-1] != ")":
-                return msg
+                return msg, should_callback
             # remove begining '(' and ending ')' from string
             # also extract name if undefined
             name, result = msg[1:-1].split(";", 1)
@@ -925,6 +925,9 @@ class SensemeDevice:
             except Exception:
                 _LOGGER.error(
                     "%s: Listener task error\n%s", self.name, traceback.format_exc()
+                )
+                _LOGGER.error(
+                    "%s: Listener task will now stop due to unexpected error", self.name
                 )
                 raise
         _LOGGER.error("%s: Listener task ended", self.name)

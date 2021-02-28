@@ -1,7 +1,12 @@
 # Changelog for aiosenseme library
 
+## v0.5.2
+
+* Fix partial status message from device causing listener task to exit from an unhandled exception. Once this happened the device would be deaf to status updates.
+
 ## v0.5.1
 
+* This version should not be used. It has a serious regression that is fixed in v0.5.2.
 * Determine a callback type (coroutine or function) only when adding the callback. The reduces overhead in callbacks.
 * Callbacks are stopped when the device is waiting for the first update and can only occur when a parameter has changed. Callback frequency has been significantly reduced.
 * Thanks go to [bdraco](https://github.com/bdraco) for help in making these changes.

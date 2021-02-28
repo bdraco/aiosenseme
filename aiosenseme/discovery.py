@@ -24,13 +24,7 @@ import traceback
 
 import ifaddr
 
-from .device import (
-    DEVICE_TYPES,
-    IGNORE_MODELS,
-    SensemeDevice,
-    SensemeFan,
-    SensemeLight,
-)
+from .device import DEVICE_TYPES, IGNORE_MODELS, SensemeDevice, SensemeFan, SensemeLight
 
 _LOGGER = logging.getLogger(__name__)
 
