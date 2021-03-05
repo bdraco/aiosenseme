@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.5.3
+
+* Added timeout in listener task to better detect when fans are offline.
+
 ## v0.5.2
 
 * Fix partial status message from device causing listener task to exit from an unhandled exception. Once this happened the device would be deaf to status updates.

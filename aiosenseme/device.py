@@ -892,7 +892,15 @@ class SensemeDevice:
                         self._endpoint = None
                         await asyncio.sleep(60)
                         continue
-                data = await self._endpoint.receive()
+                try:
+                    data = await asyncio.wait_for(
+                        self._endpoint.receive(),
+                        timeout=self.refresh_minutes * 60.0 + 30.0,
+                    )
+                except asyncio.TimeoutError:
+                    self._endpoint.abort()
+                    data = None
+                    _LOGGER.warning("%s: Device has been quiet too long.", self.name)
                 if data is None:
                     # endpoint is closed, let task know it's time open another
                     _LOGGER.warning(
