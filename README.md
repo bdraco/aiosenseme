@@ -17,6 +17,7 @@ Thanks to [PenitentTangent2401](https://github.com/PenitentTangent2401) for help
 * Supports [Wireless Wall Control](https://www.bigassfans.com/support/haiku-wireless-wall-control/) indirectly through fan status reporting.
 * Probably supports Haiku C fans.
 * The [i6 fan](https://www.bigassfans.com/fans/i6/) is NOT currently supported.
+* The [es6 fan](https://www.bigassfans.com/fans/es6/) is most likely NOT supported. This is untested.
 
 ## Command line access
 
