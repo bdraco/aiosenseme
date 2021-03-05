@@ -120,6 +120,8 @@ class SensemeEndpoint:
         Return None when the socket is closed.
         This method is a coroutine.
         """
+        if not self.transport:
+            return None
         if self.receive_queue.empty() and self.transport.is_closing():
             return None
         return await self.receive_queue.get()
@@ -900,7 +902,7 @@ class SensemeDevice:
                 except asyncio.TimeoutError:
                     self._endpoint.abort()
                     data = None
-                    _LOGGER.warning("%s: Device has been quiet too long.", self.name)
+                    _LOGGER.debug("%s: Device has been quiet too long.", self.name)
                 if data is None:
                     # endpoint is closed, let task know it's time open another
                     _LOGGER.warning(

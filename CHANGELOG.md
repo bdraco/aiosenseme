@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.5.4
+
+* Fix error caused by adding timeout in v0.5.3.
+
 ## v0.5.3
 
 * Added timeout in listener task to better detect when fans are offline.
