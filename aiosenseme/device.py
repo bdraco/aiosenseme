@@ -212,7 +212,7 @@ class SensemeDevice:
 
         self._data = dict()
         self._is_running = False
-        self._is_connected = False
+        self._is_connected = asyncio.Event()
         self._connection_lost = False
         self._endpoint = None
         self._listener_task = None
@@ -221,7 +221,7 @@ class SensemeDevice:
         self._leftover = ""
         self._callbacks = []
         self._coroutine_callbacks = []
-        self._first_update = False
+        self._first_update = asyncio.Event()
 
     def __eq__(self, other: Any) -> bool:
         """Equals magic method."""
@@ -323,12 +323,12 @@ class SensemeDevice:
     @property
     def available(self) -> bool:
         """Return True when device is connected and all parameters have been updated."""
-        return self._is_connected and self._first_update
+        return self._is_connected.is_set() and self._first_update.is_set()
 
     @property
     def connected(self) -> bool:
         """Return True when device is connected."""
-        return self._is_connected
+        return self._is_connected.is_set()
 
     @property
     def device_type(self) -> str:
@@ -630,7 +630,7 @@ class SensemeDevice:
                 # no proper response is received
                 line = await asyncio.wait_for(reader.readuntil(b")"), 10)
                 leftover, _ = self._process_message(leftover + line.decode("utf-8"))
-                if self._first_update:
+                if self._first_update.is_set():
                     return True
         except asyncio.TimeoutError:
             _LOGGER.debug(
@@ -691,12 +691,15 @@ class SensemeDevice:
             self._connection_lost = True
         if not self._is_running:
             self.start()
-        start = int(time.time())
-        while not self.available:
-            await asyncio.sleep(0.1)
-            if int(time.time()) - start >= timeout_seconds:
-                return False
-        return True
+        try:
+            await asyncio.wait(
+                [self._first_update.wait(), self._is_connected.wait()],
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            return False
+        else:
+            return True
 
     def _execute_callbacks(self):
         """Run all callbacks to indicate something has changed."""
@@ -766,15 +769,15 @@ class SensemeDevice:
             _LOGGER.debug("%s: Param updated: [%s]='%s'", self.name, key, value)
             if self.is_fan:
                 if key == "WINTERMODE;STATE":
-                    if not self._first_update:
-                        self._first_update = True
+                    if not self._first_update.is_set():
+                        self._first_update.set()
                         _LOGGER.debug("%s: First Update Complete", self.name)
             else:
                 if key == "SNSROCC;TIMEOUT;MIN":
-                    if not self._first_update:
-                        self._first_update = True
+                    if not self._first_update.is_set():
+                        self._first_update.set()
                         _LOGGER.debug("%s: First Update Complete", self.name)
-            if self._first_update and key not in SUPPRESS_CALLBACK_PARAMS:
+            if self._first_update.is_set() and key not in SUPPRESS_CALLBACK_PARAMS:
                 should_callback = True
             # update certain local variables that are not part of data
             if key == "FW;NAME":
@@ -852,14 +855,14 @@ class SensemeDevice:
             try:
                 if self._error_count > 10:
                     _LOGGER.error("%s: Listener task too many errors", self.name)
-                    self._is_connected = False
+                    self._is_connected.clear()
                     self._updater_task.cancel()
                     if self._endpoint is not None:
                         self._endpoint.close()
                     self._endpoint = None
                     break
                 if self._endpoint is None:
-                    self._is_connected = False
+                    self._is_connected.clear()
                     self._endpoint = SensemeEndpoint()
                     try:
                         _LOGGER.debug("%s: Connecting", self.name)
@@ -871,7 +874,7 @@ class SensemeDevice:
                         _LOGGER.debug("%s: Creating Updater Task", self.name)
                         self._updater_task = asyncio.create_task(self._updater())
                         self._error_count = 0
-                        self._is_connected = True
+                        self._is_connected.set()
                         if self._connection_lost:
                             _LOGGER.warning(
                                 "%s: Connection to address %s restored",
@@ -909,8 +912,8 @@ class SensemeDevice:
                         "%s: Connection to address %s lost", self.name, self.address
                     )
                     self._data = dict()
-                    self._is_connected = False
-                    self._first_update = False
+                    self._is_connected.clear()
+                    self._first_update.clear()
                     self._connection_lost = True
                     self._execute_callbacks()  # tell callbacks we disconnected
                     self._endpoint = None
