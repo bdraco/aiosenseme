@@ -1,5 +1,9 @@
 # Changelog for aiosenseme library
 
+## v0.5.5
+
+* Improve startup time when initially connecting to device.
+
 ## v0.5.4
 
 * Fix error caused by adding timeout in v0.5.3.
