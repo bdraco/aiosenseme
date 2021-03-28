@@ -1003,6 +1003,16 @@ class SensemeFan(SensemeDevice):
         state = "ON" if state else "OFF"
         self._send_command(f"FAN;PWR;{state}")
 
+    def _normalize_fan_speed(self, speed: int) -> int:
+        normalized_speed = speed
+
+        if speed < self.fan_speed_min:
+            normalized_speed = 0
+        elif speed > self.fan_speed_max:
+            normalized_speed = self.fan_speed_max
+
+        return normalized_speed
+
     @property
     def fan_speed(self) -> int:
         """Return the fan speed."""
@@ -1014,11 +1024,7 @@ class SensemeFan(SensemeDevice):
     @fan_speed.setter
     def fan_speed(self, speed: int):
         """Set the fan speed."""
-        if speed < 0:
-            speed = 0
-        elif speed > self.fan_speed_max:
-            speed = self.fan_speed_max
-        self._send_command(f"FAN;SPD;SET;{speed}")
+        self._send_command(f"FAN;SPD;SET;{self._normalize_fan_speed(speed)}")
 
     @property
     def fan_speed_min(self) -> int:
@@ -1131,6 +1137,20 @@ class SensemeFan(SensemeDevice):
         """
         return self._data.get("SMARTMODE;ACTUAL", None)
 
+    @fan_smartmode.setter
+    def fan_smartmode(self, mode: str):
+        """Set the fan auto comfort mode.
+
+        'OFF' no automatic adjustment.
+        'COOLING' increases fan speed as temp increases.
+        'HEATING' means slow mixing of air while room is occupied and faster mix speeds
+        while room is not occupied.
+        'FOLLOWTSTAT' means change between 'COOLING' and 'HEATING based on thermostat.
+        """
+        if mode not in AUTOCOMFORTS:
+            raise ValueError(f"Mode '{mode}' not supported")
+        self._send_command(f"SMARTMODE;STATE;SET;{mode}")
+
     @property
     def fan_cooltemp(self) -> float:
         """Return the auto shutoff temperature for 'COOLING' smart mode in Celsius."""
@@ -1149,6 +1169,26 @@ class SensemeFan(SensemeDevice):
             temp = 31.5
         temp = int(round(temp * 100))
         self._send_command(f"LEARN;ZEROTEMP;SET;{temp}")
+
+    @property
+    def fan_coolminspeed(self) -> int:
+        """Return the min speed of smart cooling mode"""
+        return int(self._data.get("LEARN;MINSPEED", None))
+
+    @fan_coolminspeed.setter
+    def fan_coolminspeed(self, speed: int):
+        """Set the min fan speed for 'COOLING' smart mode."""
+        self._send_command(f"LEARN;MINSPEED;SET;{self._normalize_fan_speed(speed)}")
+
+    @property
+    def fan_coolmaxspeed(self) -> int:
+        """Return the max speed of smart cooling mode"""
+        return int(self._data.get("LEARN;MAXSPEED", None))
+
+    @fan_coolmaxspeed.setter
+    def fan_coolmaxspeed(self, speed: int):
+        """Set the max fan speed for 'COOLING' smart mode."""
+        self._send_command(f"LEARN;MAXSPEED;SET;{self._normalize_fan_speed(speed)}")
 
     @property
     def motion_fan_auto(self) -> bool:
