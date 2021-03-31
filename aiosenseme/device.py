@@ -82,6 +82,9 @@ IGNORE_MODELS = [
 
 SUPPRESS_CALLBACK_PARAMS = {"SLEEP;EVENT"}
 
+def forceToRange(minv, maxv, val):
+    return min(maxv, max(minv, val))
+
 
 class SensemeEndpoint:
     """High-level endpoint for SenseME protocol."""
@@ -1003,16 +1006,6 @@ class SensemeFan(SensemeDevice):
         state = "ON" if state else "OFF"
         self._send_command(f"FAN;PWR;{state}")
 
-    def _normalize_fan_speed(self, speed: int) -> int:
-        normalized_speed = speed
-
-        if speed < self.fan_speed_min:
-            normalized_speed = 0
-        elif speed > self.fan_speed_max:
-            normalized_speed = self.fan_speed_max
-
-        return normalized_speed
-
     @property
     def fan_speed(self) -> int:
         """Return the fan speed."""
@@ -1024,7 +1017,7 @@ class SensemeFan(SensemeDevice):
     @fan_speed.setter
     def fan_speed(self, speed: int):
         """Set the fan speed."""
-        self._send_command(f"FAN;SPD;SET;{self._normalize_fan_speed(speed)}")
+        self._send_command(f"FAN;SPD;SET;{forceToRange(0, self.fan_speed_max, speed)}")
 
     @property
     def fan_speed_min(self) -> int:
@@ -1178,7 +1171,7 @@ class SensemeFan(SensemeDevice):
     @fan_coolminspeed.setter
     def fan_coolminspeed(self, speed: int):
         """Set the min fan speed for 'COOLING' smart mode."""
-        self._send_command(f"LEARN;MINSPEED;SET;{self._normalize_fan_speed(speed)}")
+        self._send_command(f"LEARN;MINSPEED;SET;{forceToRange(0, 6, speed)}")
 
     @property
     def fan_coolmaxspeed(self) -> int:
@@ -1188,7 +1181,7 @@ class SensemeFan(SensemeDevice):
     @fan_coolmaxspeed.setter
     def fan_coolmaxspeed(self, speed: int):
         """Set the max fan speed for 'COOLING' smart mode."""
-        self._send_command(f"LEARN;MAXSPEED;SET;{self._normalize_fan_speed(speed)}")
+        self._send_command(f"LEARN;MAXSPEED;SET;{forceToRange(1, 7, speed)}")
 
     @property
     def motion_fan_auto(self) -> bool:
