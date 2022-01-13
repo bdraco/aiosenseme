@@ -247,25 +247,12 @@ class SensemeDevice:
         return hash(self._uuid)
 
     @property
-    def is_sec_info_complete(self) -> bool:  # noqa: C901
+    def is_sec_info_complete(self) -> bool:
         """Return if all secondary information is complete."""
-        for prop in (
-            self._name,
-            self._uuid,
-            self._mac,
-            self._base_model,
-            self._room_name,
-            self._room_type,
-            self._has_light,
-            self._has_sensor,
-            self._fw_version,
-        ):
-            if prop is None:
-                return False
-        return True
+        return any(val is None for val in self.get_device_info.values())
 
     @property
-    def get_device_info(self) -> dict:
+    def get_device_info(self) -> dict[str, Any]:
         """Get a dict with all key information abouth this device."""
         return {
             "name": self._name,
