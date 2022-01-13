@@ -249,26 +249,19 @@ class SensemeDevice:
     @property
     def is_sec_info_complete(self) -> bool:  # noqa: C901
         """Return if all secondary information is complete."""
-        if self._name is None:
-            return False
-        if self._uuid is None:
-            return False
-        if self._mac is None:
-            return False
-        if self._base_model is None:
-            return False
-        if self._room_name is None:
-            return False
-        if self._room_type is None:
-            return False
-        if self._has_light is None:
-            return False
-        if self._has_sensor is None:
-            return False
-        if self._fw_version is None:
-            return False
-        if self._base_model is None:
-            return False
+        for prop in (
+            self._name,
+            self._uuid,
+            self._mac,
+            self._base_model,
+            self._room_name,
+            self._room_type,
+            self._has_light,
+            self._has_sensor,
+            self._fw_version,
+        ):
+            if prop is None:
+                return False
         return True
 
     @property
