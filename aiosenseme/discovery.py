@@ -283,7 +283,7 @@ class SensemeDiscovery:
             self._callbacks.remove(callback)
             _LOGGER.debug("Removed callback")
 
-    async def _create_endpoints(self):
+    async def _create_endpoints(self):  # noqa: C901
         """Create an endpoint per interface and return as a list of endpoints."""
         endpoints = []
         loop = asyncio.get_running_loop()
@@ -336,7 +336,7 @@ class SensemeDiscovery:
 
         return endpoints
 
-    async def _broadcaster(self):
+    async def _broadcaster(self):  # noqa: C901
         """Periodically broadcast discovery packet.
 
         If the underlying socket has an error this task will exit.

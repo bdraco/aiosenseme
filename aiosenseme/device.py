@@ -247,7 +247,7 @@ class SensemeDevice:
         return hash(self._uuid)
 
     @property
-    def is_sec_info_complete(self) -> bool:
+    def is_sec_info_complete(self) -> bool:  # noqa: C901
         """Return if all secondary information is complete."""
         if self._name is None:
             return False
@@ -728,7 +728,7 @@ class SensemeDevice:
         msg = f"<{self.mac};{cmd}>"
         self._endpoint.send(msg)
 
-    def _process_message(self, line) -> tuple[str, bool]:
+    def _process_message(self, line) -> tuple[str, bool]:  # noqa: C901
         """Process messages from device.
 
         May contain multiple responses in one line string.
@@ -854,7 +854,7 @@ class SensemeDevice:
                 await asyncio.sleep(10)
                 raise
 
-    async def _listener(self):
+    async def _listener(self):  # noqa: C901
         """Task that listens for device status changes.
 
         Maintains an open socket to the device at all times.
