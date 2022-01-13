@@ -3,7 +3,7 @@
 ## v0.6.0
 
 * Drop support for EOL python 3.6
-* Add support for setting smart mode thanks fro @barlock
+* Add support for setting smart mode thanks to @barlock
 
 ## v0.5.5
 
