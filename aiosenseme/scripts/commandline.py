@@ -201,7 +201,7 @@ async def discovered(devices: List[SensemeDevice]):
             print_device(device)
 
 
-async def process_args():
+async def process_args():  # noqa: C901
     """Process command line arguments."""
     try:
         device = None
