@@ -1,5 +1,10 @@
 # Changelog for aiosenseme library
 
+## v0.6.0
+
+* Drop support for EOL python 3.6
+* Add support for setting smart mode thanks to @barlock
+
 ## v0.5.5
 
 * Improve startup time when initially connecting to device.
