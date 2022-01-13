@@ -95,9 +95,10 @@ class SensemeEndpoint:
         self.opened = False
         self.transport = None
 
-    def abort(self):
+    def abort(self) -> None:
         """Close the transport immediately. Buffered write data will be flushed."""
-        self.transport.abort()
+        if self.transport is not None:
+            self.transport.abort()
         self.close()
 
     def close(self):
@@ -116,7 +117,7 @@ class SensemeEndpoint:
             return True  # opened connection but no transport is closed
         return self.transport.is_closing()
 
-    async def receive(self) -> str:
+    async def receive(self) -> str | None:
         """Wait for a message from the SenseME fan.
 
         Return None when the socket is closed.
@@ -128,8 +129,10 @@ class SensemeEndpoint:
             return None
         return await self.receive_queue.get()
 
-    def send(self, cmd):
+    def send(self, cmd: str) -> None:
         """Send a command to the SenseME fan."""
+        if self.transport is None:
+            return
         self.transport.write(cmd.encode("utf-8"))
 
 
@@ -154,7 +157,7 @@ class SensemeProtocol(asyncio.Protocol):
         self._endpoint.close()  # half-closed connections are not permitted
 
     # Streaming Protocol methods
-    def data_received(self, data: str) -> str:
+    def data_received(self, data: bytes) -> None:
         """UDP packet received on SenseME Protocol."""
         if data:
             msg = data.decode("utf-8")
@@ -285,17 +288,17 @@ class SensemeDevice:
         }
 
     @property
-    def is_fan(self) -> str:
+    def is_fan(self) -> bool:
         """Return True if this device is a fan."""
         return False
 
     @property
-    def is_light(self) -> str:
+    def is_light(self) -> bool:
         """Return True if the device is a standalone light."""
         return False
 
     @property
-    def name(self) -> str:
+    def name(self) -> str | None:
         """Return name of device."""
         if self._name is None:
             if self._mac is None:
@@ -304,7 +307,7 @@ class SensemeDevice:
         return self._name
 
     @property
-    def uuid(self) -> str:
+    def uuid(self) -> str | None:
         """Return UUID for this device.
 
         This is the network token read from the device.
@@ -313,12 +316,12 @@ class SensemeDevice:
         return self._uuid
 
     @property
-    def mac(self) -> str:
+    def mac(self) -> str | None:
         """Return MAC address of device."""
         return self._mac
 
     @property
-    def address(self) -> str:
+    def address(self) -> str | None:
         """Return IP address of device."""
         return self._address
 
@@ -338,15 +341,19 @@ class SensemeDevice:
 
         If the model is unknown then the default response is a "FAN".
         """
+        if self._base_model is None:
+            return "FAN"
         return DEVICE_TYPES.get(self._base_model.upper(), "FAN")
 
     @property
-    def model(self) -> str:
+    def model(self) -> str | None:
         """Return Model of device."""
+        if self._base_model is None:
+            return None
         return DEVICE_MODELS.get(self._base_model.upper(), self._base_model.upper())
 
     @property
-    def base_model(self) -> str:
+    def base_model(self) -> str | None:
         """Return Model of device as reported."""
         return self._base_model
 
@@ -362,25 +369,27 @@ class SensemeDevice:
     @property
     def is_unknown_model(self) -> bool:
         """Return True if the model is unknown."""
+        if self._base_model is None:
+            return True
         return DEVICE_MODELS.get(self._base_model.upper(), None) is None
 
     @property
-    def fw_version(self) -> str:
+    def fw_version(self) -> str | None:
         """Return the version of the firmware running on the SenseME device."""
         return self._fw_version
 
     @property
-    def has_light(self) -> bool:
+    def has_light(self) -> bool | None:
         """Return True if the device has an installed light."""
         return self._has_light
 
     @property
-    def has_sensor(self) -> bool:
+    def has_sensor(self) -> bool | None:
         """Return True if the device has an occupancy sensor."""
         return self._has_sensor
 
     @property
-    def device_indicators(self) -> str:
+    def device_indicators(self) -> str | None:
         """Return True if the device LED indicator is enabled."""
         value = self._data.get("DEVICE;INDICATORS", None)
         if value:
@@ -397,7 +406,7 @@ class SensemeDevice:
         self._send_command(f"DEVICE;INDICATORS;{state}")
 
     @property
-    def device_beeper(self) -> bool:
+    def device_beeper(self) -> bool | None:
         """Return the device audible alert enabled state."""
         status = self._data.get("DEVICE;BEEPER", None)
         if status:
@@ -405,7 +414,7 @@ class SensemeDevice:
         return None
 
     @device_beeper.setter
-    def device_beeper(self, value: bool):
+    def device_beeper(self, value: bool) -> None:
         """Enable/disable the device audible alert."""
         if value:
             state = "ON"
@@ -414,7 +423,7 @@ class SensemeDevice:
         self._send_command(f"DEVICE;BEEPER;{state}")
 
     @property
-    def network_ap_on(self) -> bool:
+    def network_ap_on(self) -> bool | None:
         """Return the wireless access point running state."""
         status = self._data.get("NW;AP;STATUS", None)
         if status:
@@ -422,7 +431,7 @@ class SensemeDevice:
         return None
 
     @property
-    def network_dhcp_on(self) -> bool:
+    def network_dhcp_on(self) -> bool | None:
         """Return the device local DHCP service running state."""
         dhcp = self._data.get("NW;DHCP", None)
         if dhcp:
@@ -430,7 +439,7 @@ class SensemeDevice:
         return None
 
     @property
-    def network_ip(self) -> str:
+    def network_ip(self) -> str | None:
         """Return the network IP address of the device.
 
         This IP address is reported by the SenseME device and not necessarily the same IP
@@ -443,7 +452,7 @@ class SensemeDevice:
         return None
 
     @property
-    def network_subnetmask(self) -> str:
+    def network_subnetmask(self) -> str | None:
         """Return the network gateway address of the device."""
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
         if addresses:
@@ -452,7 +461,7 @@ class SensemeDevice:
         return None
 
     @property
-    def network_gateway(self) -> str:
+    def network_gateway(self) -> str | None:
         """Return the network gateway address of the device."""
         addresses = self._data.get("NW;PARAMS;ACTUAL", None)
         if addresses:
@@ -461,24 +470,24 @@ class SensemeDevice:
         return None
 
     @property
-    def network_ssid(self) -> str:
+    def network_ssid(self) -> str | None:
         """Return the wireless SSID the device is connected to."""
         return self._data.get("NW;SSID", None)
 
     @property
-    def network_token(self) -> str:
+    def network_token(self) -> str | None:
         """Return the network token of the device. This is the same as uuid."""
         return self._uuid
 
     @property
-    def room_status(self) -> bool:
+    def room_status(self) -> bool | None:
         """Return True if the device is in a room."""
         if self._room_name and self._room_type:
             return self._room_name != "EMPTY" and self._room_type != "0"
         return None
 
     @property
-    def room_name(self) -> str:
+    def room_name(self) -> str | None:
         """Return the room name of the device.
 
         'EMPTY' is returned if not in a group.
@@ -486,7 +495,7 @@ class SensemeDevice:
         return self._room_name
 
     @property
-    def room_type(self) -> str:
+    def room_type(self) -> str | None:
         """Return the room type of the device."""
         room_type = self._room_type
         if room_type:
@@ -496,7 +505,7 @@ class SensemeDevice:
         return None
 
     @property
-    def light_on(self) -> bool:
+    def light_on(self) -> bool | None:
         """Return True when light is on at any brightness."""
         state = self._data.get("LIGHT;PWR", None)
         if state:
@@ -504,13 +513,13 @@ class SensemeDevice:
         return None
 
     @light_on.setter
-    def light_on(self, state: bool):
+    def light_on(self, state: bool) -> None:
         """Set the light power state."""
         value = "ON" if state else "OFF"
         self._send_command(f"LIGHT;PWR;{value}")
 
     @property
-    def light_brightness(self) -> int:
+    def light_brightness(self) -> int | None:
         """Return the light brightness."""
         level = self._data.get("LIGHT;LEVEL;ACTUAL", None)
         if level:
@@ -518,7 +527,7 @@ class SensemeDevice:
         return None
 
     @light_brightness.setter
-    def light_brightness(self, level: int):
+    def light_brightness(self, level: int) -> None:
         """Set the light brightness."""
         if level < 0:
             level = 0
@@ -527,7 +536,7 @@ class SensemeDevice:
         self._send_command(f"LIGHT;LEVEL;SET;{level}")
 
     @property
-    def light_brightness_min(self) -> int:
+    def light_brightness_min(self) -> int | None:
         """Return the light brightness minimum."""
         min_brightness = self._data.get("LIGHT;LEVEL;MIN", None)
         if min_brightness:
@@ -535,7 +544,7 @@ class SensemeDevice:
         return None
 
     @property
-    def light_brightness_max(self) -> int:
+    def light_brightness_max(self) -> int | None:
         """Return the light brightness maximum."""
         max_brightness = self._data.get("LIGHT;LEVEL;MAX", None)
         if max_brightness:
@@ -543,7 +552,7 @@ class SensemeDevice:
         return None
 
     @property
-    def light_brightness_limits_room(self) -> Tuple:
+    def light_brightness_limits_room(self) -> Tuple | None:
         """Return a tuple of the min and max light brightness for the room.
 
         A room can limit the minimum/maximum light brightness while keeping the same
@@ -562,7 +571,7 @@ class SensemeDevice:
         return min_bright, max_bright
 
     @property
-    def motion_detected(self) -> bool:
+    def motion_detected(self) -> bool | None:
         """Return True when device motion sensor says room is occupied.
 
         Available on all SenseME fans.
@@ -573,7 +582,7 @@ class SensemeDevice:
         return None
 
     @property
-    def motion_light_auto(self) -> bool:
+    def motion_light_auto(self) -> bool | None:
         """Return True when light is in automatic on with motion mode."""
         if not self.has_light:
             return None
@@ -583,15 +592,15 @@ class SensemeDevice:
         return None
 
     @motion_light_auto.setter
-    def motion_light_auto(self, state: bool):
+    def motion_light_auto(self, state: bool) -> None:
         """Set the light automatic on with motion mode."""
         if not self.has_light:
             return
-        state = "ON" if state else "OFF"
-        self._send_command(f"LIGHT;AUTO;{state}")
+        converted_state = "ON" if state else "OFF"
+        self._send_command(f"LIGHT;AUTO;{converted_state}")
 
     @property
-    def sleep_mode(self) -> bool:
+    def sleep_mode(self) -> bool | None:
         """Return True when sleep mode is enabled."""
         state = self._data.get("SLEEP;STATE", None)
         if state:
@@ -599,10 +608,10 @@ class SensemeDevice:
         return None
 
     @sleep_mode.setter
-    def sleep_mode(self, state: bool):
+    def sleep_mode(self, state: bool) -> None:
         """Set the sleep mode."""
-        state = "ON" if state else "OFF"
-        self._send_command(f"SLEEP;STATE;{state}")
+        converted_state = "ON" if state else "OFF"
+        self._send_command(f"SLEEP;STATE;{converted_state}")
 
     async def async_fill_out_info(self) -> bool:
         """Retrieve info from the SenseME device directly.
@@ -657,7 +666,7 @@ class SensemeDevice:
                 writer.close()
                 await writer.wait_closed()
 
-    def add_callback(self, callback: Callable):
+    def add_callback(self, callback: Callable) -> None:
         """Add callback function/coroutine. Called when parameters are updated."""
         is_coroutine = inspect.iscoroutinefunction(callback)
         if is_coroutine:
@@ -670,7 +679,7 @@ class SensemeDevice:
             self._callbacks.append(callback)
         _LOGGER.debug("%s: Added function callback", self.name)
 
-    def remove_callback(self, callback):
+    def remove_callback(self, callback) -> None:
         """Remove existing callback function/coroutine."""
         if callback in self._coroutine_callbacks:
             self._coroutine_callbacks.remove(callback)
@@ -700,10 +709,9 @@ class SensemeDevice:
             )
         except asyncio.TimeoutError:
             return False
-        else:
-            return True
+        return True
 
-    def _execute_callbacks(self):
+    def _execute_callbacks(self) -> None:
         """Run all callbacks to indicate something has changed."""
         count = 0
         for callback in self._callbacks:
@@ -714,13 +722,14 @@ class SensemeDevice:
             asyncio.create_task(callback())
         _LOGGER.debug("%s: %s callback(s) happened.", self.name, count)
 
-    def _send_command(self, cmd):
+    def _send_command(self, cmd) -> None:
         """Send a command to SenseME device."""
+        if self._endpoint is None:
+            return
         msg = f"<{self.mac};{cmd}>"
         self._endpoint.send(msg)
-        # _LOGGER.debug("%s: Command sent '%s'", self.name, cmd)
 
-    def _process_message(self, line) -> str:
+    def _process_message(self, line) -> Tuple[str, bool]:
         """Process messages from device.
 
         May contain multiple responses in one line string.
@@ -983,12 +992,12 @@ class SensemeFan(SensemeDevice):
         return string
 
     @property
-    def is_fan(self) -> str:
+    def is_fan(self) -> bool:
         """Return True if this device is a fan."""
         return True
 
     @property
-    def has_light(self) -> bool:
+    def has_light(self) -> bool | None:
         """Return True if the fan has an installed light."""
         return self._has_light
 
@@ -1001,13 +1010,13 @@ class SensemeFan(SensemeDevice):
         return None
 
     @fan_on.setter
-    def fan_on(self, state: bool):
+    def fan_on(self, state: bool) -> None:
         """Set the fan power state."""
-        state = "ON" if state else "OFF"
-        self._send_command(f"FAN;PWR;{state}")
+        converted_state = "ON" if state else "OFF"
+        self._send_command(f"FAN;PWR;{converted_state}")
 
     @property
-    def fan_speed(self) -> int:
+    def fan_speed(self) -> int | None:
         """Return the fan speed."""
         speed = self._data.get("FAN;SPD;ACTUAL", None)
         if speed:
@@ -1015,12 +1024,12 @@ class SensemeFan(SensemeDevice):
         return None
 
     @fan_speed.setter
-    def fan_speed(self, speed: int):
+    def fan_speed(self, speed: int) -> None:
         """Set the fan speed."""
         self._send_command(f"FAN;SPD;SET;{forceToRange(0, self.fan_speed_max, speed)}")
 
     @property
-    def fan_speed_min(self) -> int:
+    def fan_speed_min(self) -> int | None:
         """Return the fan speed minimum."""
         min_speed = self._data.get("FAN;SPD;MIN", None)
         if min_speed:
@@ -1028,7 +1037,7 @@ class SensemeFan(SensemeDevice):
         return None
 
     @property
-    def fan_speed_max(self) -> int:
+    def fan_speed_max(self) -> int | None:
         """Return the fan speed maximum."""
         max_speed = self._data.get("FAN;SPD;MAX", None)
         if max_speed:
@@ -1036,12 +1045,12 @@ class SensemeFan(SensemeDevice):
         return None
 
     @property
-    def fan_speed_limits(self) -> Tuple:
+    def fan_speed_limits(self) -> Tuple[int | None, int | None]:
         """Return a tuple of the min/max fan speeds."""
         return self.fan_speed_min, self.fan_speed_max
 
     @property
-    def fan_speed_limits_room(self) -> Tuple:
+    def fan_speed_limits_room(self) -> Tuple[int, int] | None:
         """Return a tuple of the min/max fan speeds the room is configured to support.
 
         A room can limit the minimum/maximum fan speed while keeping the same number of
@@ -1059,7 +1068,7 @@ class SensemeFan(SensemeDevice):
         return min_speed, max_speed
 
     @fan_speed_limits_room.setter
-    def fan_speed_limits_room(self, speeds: Tuple):
+    def fan_speed_limits_room(self, speeds: Tuple) -> None:
         """Set a tuple of the min/max fan speeds the room is configured to support."""
         if speeds[0] >= speeds[1]:
             _LOGGER.error("Min speed cannot exceed max speed")
@@ -1072,7 +1081,7 @@ class SensemeFan(SensemeDevice):
         return self._data.get("FAN;DIR", None)
 
     @fan_dir.setter
-    def fan_dir(self, direction: str):
+    def fan_dir(self, direction: str) -> None:
         """Set the fan direction."""
         if direction not in DIRECTIONS:
             raise ValueError(
@@ -1081,7 +1090,7 @@ class SensemeFan(SensemeDevice):
         self._send_command(f"FAN;DIR;SET;{direction}")
 
     @property
-    def fan_whoosh_mode(self) -> bool:
+    def fan_whoosh_mode(self) -> bool | None:
         """Return True when fan whoosh mode is on."""
         state = self._data.get("FAN;WHOOSH;STATUS", None)
         if state:
@@ -1089,13 +1098,13 @@ class SensemeFan(SensemeDevice):
         return None
 
     @fan_whoosh_mode.setter
-    def fan_whoosh_mode(self, state: bool):
+    def fan_whoosh_mode(self, state: bool) -> None:
         """Set the fan whoosh mode."""
         value = "ON" if state else "OFF"
         self._send_command(f"FAN;WHOOSH;{value}")
 
     @property
-    def fan_autocomfort(self) -> str:
+    def fan_autocomfort(self) -> str | None:
         """Get the auto comfort mode from the fan.
 
         'OFF' no automatic adjustment,
@@ -1107,7 +1116,7 @@ class SensemeFan(SensemeDevice):
         return self._data.get("SMARTMODE;STATE", None)
 
     @fan_autocomfort.setter
-    def fan_autocomfort(self, state: str):
+    def fan_autocomfort(self, state: str) -> None:
         """Set the fan auto comfort mode.
 
         'OFF' no automatic adjustment.
@@ -1120,7 +1129,7 @@ class SensemeFan(SensemeDevice):
         self._send_command(f"SMARTMODE;STATE;SET;{value}")
 
     @property
-    def fan_smartmode(self) -> str:
+    def fan_smartmode(self) -> str | None:
         """Get the current smart mode from the fan.
 
         'OFF' no automatic adjustment.
@@ -1145,7 +1154,7 @@ class SensemeFan(SensemeDevice):
         self._send_command(f"SMARTMODE;STATE;SET;{mode}")
 
     @property
-    def fan_cooltemp(self) -> float:
+    def fan_cooltemp(self) -> float | None:
         """Return the auto shutoff temperature for 'COOLING' smart mode in Celsius."""
         temp = int(self._data.get("LEARN;ZEROTEMP", None))
         if temp:
@@ -1153,7 +1162,7 @@ class SensemeFan(SensemeDevice):
         return None
 
     @fan_cooltemp.setter
-    def fan_cooltemp(self, temp: float):
+    def fan_cooltemp(self, temp: float) -> None:
         """Set the auto shutoff temperature for 'COOLING' smart mode in Celsius."""
         # force temperature into range
         if temp < 10:
@@ -1164,27 +1173,27 @@ class SensemeFan(SensemeDevice):
         self._send_command(f"LEARN;ZEROTEMP;SET;{temp}")
 
     @property
-    def fan_coolminspeed(self) -> int:
+    def fan_coolminspeed(self) -> int | None:
         """Return the min speed of smart cooling mode"""
         return int(self._data.get("LEARN;MINSPEED", None))
 
     @fan_coolminspeed.setter
-    def fan_coolminspeed(self, speed: int):
+    def fan_coolminspeed(self, speed: int) -> None:
         """Set the min fan speed for 'COOLING' smart mode."""
         self._send_command(f"LEARN;MINSPEED;SET;{forceToRange(0, 6, speed)}")
 
     @property
-    def fan_coolmaxspeed(self) -> int:
+    def fan_coolmaxspeed(self) -> int | None:
         """Return the max speed of smart cooling mode"""
         return int(self._data.get("LEARN;MAXSPEED", None))
 
     @fan_coolmaxspeed.setter
-    def fan_coolmaxspeed(self, speed: int):
+    def fan_coolmaxspeed(self, speed: int) -> None:
         """Set the max fan speed for 'COOLING' smart mode."""
         self._send_command(f"LEARN;MAXSPEED;SET;{forceToRange(1, 7, speed)}")
 
     @property
-    def motion_fan_auto(self) -> bool:
+    def motion_fan_auto(self) -> bool | None:
         """Return True when fan is in automatic on with motion mode."""
         state = self._data.get("FAN;AUTO", None)
         if state:
@@ -1192,10 +1201,10 @@ class SensemeFan(SensemeDevice):
         return None
 
     @motion_fan_auto.setter
-    def motion_fan_auto(self, state: bool):
+    def motion_fan_auto(self, state: bool) -> None:
         """Set the fan automatic on with motion mode."""
-        state = "ON" if state else "OFF"
-        self._send_command(f"FAN;AUTO;{state}")
+        converted_state = "ON" if state else "OFF"
+        self._send_command(f"FAN;AUTO;{converted_state}")
 
 
 class SensemeLight(SensemeDevice):
@@ -1215,7 +1224,7 @@ class SensemeLight(SensemeDevice):
         return string
 
     @property
-    def is_light(self) -> str:
+    def is_light(self) -> bool:
         """Return True if the device is a standalone light."""
         return True
 
@@ -1225,7 +1234,7 @@ class SensemeLight(SensemeDevice):
         return True
 
     @property
-    def light_color_temp(self) -> int:
+    def light_color_temp(self) -> int | None:
         """Return the light color temperature."""
         color_temp = self._data.get("LIGHT;COLOR;TEMP;VALUE", None)
         if color_temp:
@@ -1233,17 +1242,23 @@ class SensemeLight(SensemeDevice):
         return None
 
     @light_color_temp.setter
-    def light_color_temp(self, color_temp: int):
+    def light_color_temp(self, color_temp: int) -> None:
         """Set the light color temperature."""
-        if color_temp < self.light_color_temp_min:
+        if (
+            self.light_color_temp_min is not None
+            and color_temp < self.light_color_temp_min
+        ):
             color_temp = self.light_color_temp_min
-        if color_temp > self.light_color_temp_max:
+        if (
+            self.light_color_temp_max is not None
+            and color_temp > self.light_color_temp_max
+        ):
             color_temp = self.light_color_temp_max
         color_temp = int(round(color_temp / 100.0)) * 100
         self._send_command(f"LIGHT;COLOR;TEMP;VALUE;SET;{color_temp}")
 
     @property
-    def light_color_temp_min(self) -> int:
+    def light_color_temp_min(self) -> int | None:
         """Return the light color temperature minimum (warmest light)."""
         min_color_temp = self._data.get("LIGHT;COLOR;TEMP;MIN", None)
         if min_color_temp:
@@ -1251,7 +1266,7 @@ class SensemeLight(SensemeDevice):
         return None
 
     @property
-    def light_color_temp_max(self) -> int:
+    def light_color_temp_max(self) -> int | None:
         """Return the light color temperature maximum (coolest light)."""
         max_color_temp = self._data.get("LIGHT;COLOR;TEMP;MAX", None)
         if max_color_temp:
