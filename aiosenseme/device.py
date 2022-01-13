@@ -14,13 +14,15 @@ Based on work from TomFaulkner at https://github.com/TomFaulkner/SenseMe
 
 Source can be found at https://github.com/mikelawrence/aiosenseme
 """
+from __future__ import annotations
+
 import asyncio
 import inspect
 import ipaddress
 import logging
 import random
 import traceback
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Coroutine
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -142,7 +144,7 @@ class SensemeProtocol(asyncio.Protocol):
         self._endpoint = endpoint
 
     # Protocol methods
-    def connection_made(self, transport: asyncio.Protocol):
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Socket connect on SenseME Protocol."""
         _LOGGER.debug("%s: Connected", self._name)
         self._endpoint.transport = transport
@@ -207,12 +209,12 @@ class SensemeDevice:
                     self._has_sensor = False
             else:
                 self._has_sensor = None
-        self._room_name = None
-        self._room_type = None
+        self._room_name: str | None = None
+        self._room_type: int | None = None
         self._fw_name = "Unknown"
-        self._fw_version = None
+        self._fw_version: str | None = None
 
-        self._data = dict()
+        self._data: dict[str, Any] = dict()
         self._is_running = False
         self._is_connected = asyncio.Event()
         self._connection_lost = False
@@ -221,8 +223,8 @@ class SensemeDevice:
         self._updater_task = None
         self._error_count = 0
         self._leftover = ""
-        self._callbacks = []
-        self._coroutine_callbacks = []
+        self._callbacks: list[Callable] = []
+        self._coroutine_callbacks: list[Coroutine] = []
         self._first_update = asyncio.Event()
 
     def __eq__(self, other: Any) -> bool:
@@ -549,7 +551,7 @@ class SensemeDevice:
         return None
 
     @property
-    def light_brightness_limits_room(self) -> Tuple | None:
+    def light_brightness_limits_room(self) -> tuple | None:
         """Return a tuple of the min and max light brightness for the room.
 
         A room can limit the minimum/maximum light brightness while keeping the same
@@ -628,9 +630,9 @@ class SensemeDevice:
                 "Retrieve device information: Status Update from address %s",
                 self.address,
             )
-            writer.write(f"<{self._address};DEVICE;ID;GET>".encode("utf-8"))
-            writer.write(f"<{self._address};SNSROCC;STATUS;GET>".encode("utf-8"))
-            writer.write(f"<{self._address};GETALL;GET>".encode("utf-8"))
+            writer.write(f"<{self._address};DEVICE;ID;GET>".encode())
+            writer.write(f"<{self._address};SNSROCC;STATUS;GET>".encode())
+            writer.write(f"<{self._address};GETALL;GET>".encode())
 
             leftover = ""
             while True:
@@ -668,12 +670,12 @@ class SensemeDevice:
         is_coroutine = inspect.iscoroutinefunction(callback)
         if is_coroutine:
             if callback not in self._coroutine_callbacks:
-                self._coroutine_callbacks.append(callback)
+                self._coroutine_callbacks.append(callback)  # type: ignore
             _LOGGER.debug("%s: Added coroutine callback", self.name)
             return
 
         if callback not in self._callbacks:
-            self._callbacks.append(callback)
+            self._callbacks.append(callback)  # type: ignore
         _LOGGER.debug("%s: Added function callback", self.name)
 
     def remove_callback(self, callback) -> None:
@@ -714,9 +716,9 @@ class SensemeDevice:
         for callback in self._callbacks:
             count += 1
             callback()
-        for callback in self._coroutine_callbacks:
+        for coro in self._coroutine_callbacks:
             count += 1
-            asyncio.create_task(callback())
+            asyncio.create_task(coro())  # type: ignore
         _LOGGER.debug("%s: %s callback(s) happened.", self.name, count)
 
     def _send_command(self, cmd) -> None:
@@ -726,7 +728,7 @@ class SensemeDevice:
         msg = f"<{self.mac};{cmd}>"
         self._endpoint.send(msg)
 
-    def _process_message(self, line) -> Tuple[str, bool]:
+    def _process_message(self, line) -> tuple[str, bool]:
         """Process messages from device.
 
         May contain multiple responses in one line string.
@@ -999,7 +1001,7 @@ class SensemeFan(SensemeDevice):
         return self._has_light
 
     @property
-    def fan_on(self) -> bool:
+    def fan_on(self) -> bool | None:
         """Return True when fan is on at any speed."""
         state = self._data.get("FAN;PWR", None)
         if state:
@@ -1046,12 +1048,12 @@ class SensemeFan(SensemeDevice):
         return None
 
     @property
-    def fan_speed_limits(self) -> Tuple[int | None, int | None]:
+    def fan_speed_limits(self) -> tuple[int | None, int | None]:
         """Return a tuple of the min/max fan speeds."""
         return self.fan_speed_min, self.fan_speed_max
 
     @property
-    def fan_speed_limits_room(self) -> Tuple[int, int] | None:
+    def fan_speed_limits_room(self) -> tuple[int, int] | None:
         """Return a tuple of the min/max fan speeds the room is configured to support.
 
         A room can limit the minimum/maximum fan speed while keeping the same number of
@@ -1069,7 +1071,7 @@ class SensemeFan(SensemeDevice):
         return min_speed, max_speed
 
     @fan_speed_limits_room.setter
-    def fan_speed_limits_room(self, speeds: Tuple) -> None:
+    def fan_speed_limits_room(self, speeds: tuple) -> None:
         """Set a tuple of the min/max fan speeds the room is configured to support."""
         if speeds[0] >= speeds[1]:
             _LOGGER.error("Min speed cannot exceed max speed")

@@ -10,7 +10,8 @@ Based on work from TomFaulkner at https://github.com/TomFaulkner/SenseMe
 
 Source can be found at https://github.com/mikelawrence/aiosenseme
 """
-# from aiosenseme.aiosenseme.scripts.commandline import _DEVICES
+from __future__ import annotations
+
 import asyncio
 import errno
 import inspect
@@ -21,8 +22,9 @@ import socket
 import sys
 import time
 import traceback
+from typing import Callable
 
-import ifaddr
+import ifaddr  # type: ignore
 
 from .device import DEVICE_TYPES, IGNORE_MODELS, SensemeDevice, SensemeFan, SensemeLight
 
@@ -43,12 +45,12 @@ class SensemeDiscoveryEndpoint:
     """High-level endpoint for SenseME Discovery protocol."""
 
     # one receive queue for all endpoints
-    receive_queue = asyncio.Queue()
+    receive_queue: asyncio.Queue = asyncio.Queue()
 
     def __init__(self, ip: str = None):
         """Initialize Senseme Discovery Endpoint."""
         self.opened = False
-        self.transport = None
+        self.transport: asyncio.BaseTransport | None = None
         self.ip = ip
 
     def abort(self):
@@ -82,12 +84,13 @@ class SensemeDiscoveryEndpoint:
             return True  # opened connection but no transport is closed
         return self.transport.is_closing()
 
-    async def receive(self) -> SensemeDevice:
+    async def receive(self) -> SensemeDevice | None:
         """Wait for discovered device and return it.
 
         Return None when the socket is closed.
         This method is a coroutine.
         """
+        assert self.transport is not None
         while True:
             if self.receive_queue.empty() and self.transport.is_closing():
                 return None
@@ -110,25 +113,25 @@ class SensemeDiscoveryEndpoint:
             _LOGGER.debug("Received '%s' from %s on %s", msg, addr, self.ip)
             device_type = DEVICE_TYPES.get(msg_data[4], "FAN")
             if device_type == "FAN":
-                device = SensemeFan(
+                return SensemeFan(
                     name=msg_data[0],
                     mac=msg_data[3],
                     address=addr,
                     base_model=msg_data[4],
                 )
             elif device_type == "LIGHT":
-                device = SensemeLight(
+                return SensemeLight(
                     name=msg_data[0],
                     mac=msg_data[3],
                     address=addr,
                     base_model=msg_data[4],
                 )
-            return device
+            return None
 
     def send_broadcast(self):
         """Send the SenseME Discovery broadcast packet."""
         if not self.is_closing():
-            data = "<ALL;DEVICE;ID;GET>".encode("utf-8")
+            data = b"<ALL;DEVICE;ID;GET>"
             self.transport.sendto(data, ("<broadcast>", PORT))
             _LOGGER.debug("Discovery broadcast on %s", self.ip)
 
@@ -141,7 +144,7 @@ class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
         self._endpoint = endpoint
 
     # Protocol methods
-    def connection_made(self, transport: asyncio.Protocol):
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Socket connect on SenseME Discovery Protocol."""
         self._endpoint.transport = transport
         self._endpoint.opened = True
@@ -154,7 +157,7 @@ class SensemeDiscoveryProtocol(asyncio.DatagramProtocol):
         self._endpoint.close()  # half-closed connections are not permitted
 
     # Datagram protocol methods
-    def datagram_received(self, data: str, addr: str):
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
         """UDP packet received on SenseME Discovery Protocol."""
         if data:
             msg = data.decode("utf-8")
@@ -178,14 +181,16 @@ class SensemeDiscovery:
     for response messages from SenseME devices by Big Ass Fans.
     """
 
-    _devices = []  # all SensemeDiscovery objects use the same device list
+    _devices: list[
+        SensemeDevice
+    ] = []  # all SensemeDiscovery objects use the same device list
 
     def __init__(self, start_first: bool = True, refresh_minutes: int = 5):
         """Initialize Senseme Discovery Protocol."""
         self.start_first = start_first
         self.refresh_minutes = refresh_minutes
         self._is_running = False
-        self._callbacks = []
+        self._callbacks: list[Callable] = []
         self._broadcaster_task = None
 
     @property
@@ -193,10 +198,10 @@ class SensemeDiscovery:
         """Get the current list of discovered devices."""
         return self._devices
 
-    async def async_add_by_device_info(self, info: str):
+    async def async_add_by_device_info(self, info: dict[str, str]):
         """Add a device by IP address."""
-        for device in self._devices:
-            if device == info["address"]:
+        for existing_device in self._devices:
+            if existing_device.address == info["address"]:
                 _LOGGER.debug("Did not add by device info. Device already exists")
                 return
         status, device = await async_get_device_by_device_info(
@@ -224,8 +229,8 @@ class SensemeDiscovery:
 
     async def async_add_by_ip_address(self, address: str):
         """Add a device by IP address."""
-        for device in self._devices:
-            if device == address:
+        for existing_device in self._devices:
+            if existing_device.address == address:
                 _LOGGER.debug("Did not add by IP address. Device already exists")
                 return
         device = await async_get_device_by_ip_address(
@@ -466,7 +471,7 @@ async def discover_any(timeout_seconds=5) -> bool:
     return count > 0
 
 
-async def discover(value, timeout_seconds=5) -> SensemeDevice:
+async def discover(value, timeout_seconds=5) -> SensemeDevice | None:
     """Discover a device with a name or room name.
 
     None is returned if the device was not found.
@@ -495,7 +500,7 @@ async def discover(value, timeout_seconds=5) -> SensemeDevice:
 # pylint: disable=protected-access
 async def async_get_device_by_ip_address(
     address: str, refresh_minutes: int = 1, timeout_seconds: int = 5
-) -> SensemeDevice:
+) -> SensemeDevice | None:
     """Asynchronously get a device by IP Address.
 
     This function will connect to the device to determine the model so an
@@ -516,7 +521,7 @@ async def async_get_device_by_ip_address(
         basedevice = SensemeDevice(address=address)
         if await asyncio.wait_for(basedevice.async_fill_out_info(), timeout_seconds):
             if basedevice.device_type == "FAN":
-                device = SensemeFan(
+                device: SensemeFan | SensemeLight = SensemeFan(
                     name=basedevice._name,
                     mac=basedevice._mac,
                     address=address,
@@ -550,7 +555,7 @@ async def async_get_device_by_ip_address(
 
 async def async_get_device_by_device_info(
     info: dict, start_first=False, refresh_minutes: int = 1, timeout_seconds: int = 10
-) -> SensemeDevice:
+) -> tuple[bool, SensemeDevice]:
     """Asynchronously get a device by device info dict.
 
     The device info dict comes from SensemeDevice.get_device_info(). This
@@ -565,17 +570,19 @@ async def async_get_device_by_device_info(
     """
     try:
         if info.get("is_fan"):
-            device = SensemeFan(info=info, refresh_minutes=refresh_minutes)
+            device: SensemeFan | SensemeLight = SensemeFan(
+                info=info, refresh_minutes=refresh_minutes
+            )
         elif info.get("is_light"):
             device = SensemeLight(info=info, refresh_minutes=refresh_minutes)
         if start_first:
             if await device.async_update(timeout_seconds=timeout_seconds):
-                return [True, device]
+                return True, device
         else:
             if await asyncio.wait_for(device.async_fill_out_info(), timeout_seconds):
-                return [True, device]
+                return True, device
     except asyncio.TimeoutError:
         _LOGGER.debug("Get device by device info dict (%s) failed. No response", info)
     except asyncio.CancelledError:
         _LOGGER.debug("Task get device by device info dict(%s) cancelled", info)
-    return [False, device]
+    return False, device

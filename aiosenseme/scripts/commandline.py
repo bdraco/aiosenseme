@@ -1,4 +1,5 @@
 """Script interface for aiosenseme library."""
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -8,6 +9,7 @@ from typing import List
 
 import aiosenseme
 from aiosenseme import SensemeDevice, SensemeDiscovery, __version__
+from aiosenseme.device import SensemeFan, SensemeLight
 
 ARGS = argparse.ArgumentParser(
     description="Discover and control SenseME devices by Big Ass Fans."
@@ -160,6 +162,7 @@ def print_state(prefix: str, device: SensemeDevice):
     """Print information about a devices's current state."""
     msg = prefix
     if device.is_fan:
+        assert isinstance(device, SensemeFan)
         if device.fan_on:
             msg += f": Fan is on (speed: {device.fan_speed}"
             if device.fan_whoosh_mode:
@@ -174,6 +177,7 @@ def print_state(prefix: str, device: SensemeDevice):
         if device.sleep_mode:
             msg += ", Sleep Mode is on"
     elif device.is_light:
+        assert isinstance(device, SensemeLight)
         if device.light_on:
             msg += f": Light is on (brightness: {device.light_brightness}"
             msg += f", color temp: {device.light_color_temp})"
