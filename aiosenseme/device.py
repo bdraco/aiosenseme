@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import ipaddress
 import logging
 import random
 import re
@@ -236,22 +235,17 @@ class SensemeDevice:
 
     def __eq__(self, other: Any) -> bool:
         """Equals magic method."""
-        try:
-            ip_addr = ipaddress.ip_address(other)
-            return ip_addr == ipaddress.ip_address(self._address)
-        except ValueError:
-            pass
         if isinstance(other, SensemeDevice):
-            if self._address and other.address:
-                return self._address == other.address
+            if self._mac and other.mac:
+                return self._mac == other.mac
         if isinstance(other, str):
-            return other in [self._name]
+            return other == self._name
 
         return NotImplemented
 
     def __hash__(self) -> int:
         """Hash magic method."""
-        return hash(self._uuid)
+        return hash(self._mac)  # uuid may not be present via discovery, but mac will
 
     @property
     def is_sec_info_complete(self) -> bool:
@@ -715,13 +709,20 @@ class SensemeDevice:
         msg = f"<{self.mac};{cmd}>"
         self._endpoint.send(msg)
 
-    def _process_message(self, line) -> tuple[str, bool]:  # noqa: C901
+    def _process_message(self, line: str) -> tuple[str, bool]:
         """Process messages from device.
 
         May contain multiple responses in one line string.
         Last response may be a partial so it is returned.
         This partial should be added to next line.
         """
+        try:
+            return self._process_message_inner(line)
+        except Exception:  # pylint: disable=broad-except:
+            _LOGGER.warning("Error processing message", exc_info=True)
+            return "", False
+
+    def _process_message_inner(self, line: str) -> tuple[str, bool]:  # noqa: C901
         should_callback = False
         # The line received may have multiple parenthesized responses
         # Split them and process each individual message.
