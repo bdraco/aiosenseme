@@ -21,6 +21,7 @@ import inspect
 import ipaddress
 import logging
 import random
+import re
 import traceback
 from typing import Any, Callable, Coroutine
 
@@ -83,6 +84,8 @@ IGNORE_MODELS = [
 ]
 
 SUPPRESS_CALLBACK_PARAMS = {"SLEEP;EVENT"}
+
+COMMAND_RE = re.compile(r"\((?:\\.|[^(\)\\])*\)")
 
 
 def forceToRange(minv, maxv, val):
@@ -722,11 +725,7 @@ class SensemeDevice:
         should_callback = False
         # The line received may have multiple parenthesized responses
         # Split them and process each individual message.
-        # Convert "(msg1)(msg2)(msg3)" to "(msg1)|(msg2)|(msg3)"
-        # then split on the '|'
-        for msg in line.replace(")(", ")|(").split("|"):
-            if msg[-1] != ")":
-                return msg, should_callback
+        for msg in COMMAND_RE.findall(line):
             # remove begining '(' and ending ')' from string
             # also extract name if undefined
             name, result = msg[1:-1].split(";", 1)
