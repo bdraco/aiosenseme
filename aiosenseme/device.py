@@ -253,7 +253,7 @@ class SensemeDevice:
     @property
     def is_sec_info_complete(self) -> bool:
         """Return if all secondary information is complete."""
-        return any(val is None for val in self.get_device_info.values())
+        return not any(val is None for val in self.get_device_info.values())
 
     @property
     def get_device_info(self) -> dict[str, Any]:
