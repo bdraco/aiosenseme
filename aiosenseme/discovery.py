@@ -201,7 +201,7 @@ class SensemeDiscovery:
     async def async_add_by_device_info(self, info: dict[str, str]):
         """Add a device by IP address."""
         for existing_device in self._devices:
-            if existing_device.address == info["address"]:
+            if existing_device.mac == info["mac"]:
                 _LOGGER.debug("Did not add by device info. Device already exists")
                 return
         status, device = await async_get_device_by_device_info(
@@ -215,17 +215,28 @@ class SensemeDiscovery:
                 info.get("address"),
             )
             return
-        if device not in self._devices:
-            self._devices.append(device)
-            _LOGGER.debug("Add by device info %s", device)
-        else:
-            _LOGGER.debug("Did not add by device info. Device already exists", device)
-            return
+        self._add_or_update_device(device)
+        self._async_process_callbacks()
+
+    def _async_process_callbacks(self) -> None:
+        """Callback devices when a new device is found."""
         for callback in self._callbacks:
             if inspect.iscoroutinefunction(callback):
                 asyncio.create_task(callback(self._devices.copy()))
             else:
                 callback(self._devices.copy())
+
+    def _add_or_update_device(self, device: SensemeDevice) -> None:
+        """Add or update a device."""
+        if device not in self._devices:
+            self._devices.append(device)
+            _LOGGER.debug("Add by device info %s", device)
+            return
+        _LOGGER.debug("Did not add by device info. Device already exists")
+        for existing_device in self._devices:
+            if device == existing_device:
+                # Handle address changes
+                existing_device._address = device.address
 
     async def async_add_by_ip_address(self, address: str):
         """Add a device by IP address."""
@@ -241,27 +252,10 @@ class SensemeDiscovery:
                 "Add device by IP address failed. Unable to connect '%s'", address
             )
             return
-        if self.start_first:
-            if device not in self._devices:
-                await device.async_update()
-                if device not in self._devices:
-                    self._devices.append(device)
-                    _LOGGER.debug("Add by IP address %s", device)
-                else:
-                    _LOGGER.debug("Did not add by IP address. Device already exists")
-                    return
-        else:
-            if device not in self._devices:
-                self._devices.append(device)
-                _LOGGER.debug("Add by IP address %s", device)
-            else:
-                _LOGGER.debug("Did not by IP address. Device already exists")
-                return
-        for callback in self._callbacks:
-            if inspect.iscoroutinefunction(callback):
-                asyncio.create_task(callback(self._devices.copy()))
-            else:
-                callback(self._devices.copy())
+        if self.start_first and device not in self._devices:
+            await device.async_update()
+        self._add_or_update_device(device)
+        self._async_process_callbacks()
 
     def add_callback(self, callback):
         """Add callback function/coroutine.
@@ -288,47 +282,51 @@ class SensemeDiscovery:
         endpoints = []
         loop = asyncio.get_running_loop()
         listening = 0
-        for adapter in ifaddr.get_adapters():
-            for ip in adapter.ips:
-                if ip.is_IPv4 and not ipaddress.ip_address(ip.ip).is_loopback:
-                    # _LOGGER.debug("Found IPv4 %s", ip.ip)
-                    try:
-                        endpoint = SensemeDiscoveryEndpoint(ip.ip)
-                        await loop.create_datagram_endpoint(
-                            lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
-                            local_addr=(ip.ip, PORT),
-                            family=socket.AF_INET,
-                            allow_broadcast=True,
-                        )
-                        endpoints.append(endpoint)
-                        listening += 1
-                    except OSError as e:
-                        # borrowed this error handling from python-zeroconf
-                        _errno = e.args[0]
-                        err_einval = {errno.EINVAL}
-                        if sys.platform == "win32":
-                            err_einval |= {errno.WSAEINVAL}
-                        if _errno == errno.EADDRINUSE:
-                            _LOGGER.debug(
-                                "Unable to listen on %s. " "Address already in use",
-                                ip.ip,
-                            )
-                        elif _errno == errno.EADDRNOTAVAIL:
-                            _LOGGER.debug(
-                                "Unable to listen on %s. " "Address not available",
-                                ip.ip,
-                            )
-                        elif _errno in err_einval:
-                            _LOGGER.debug(
-                                "Unable to listen on %s. " "Multicast not supported",
-                                ip.ip,
-                            )
-                        else:
-                            _LOGGER.error(
-                                "Unable to listen on %s.\n%s",
-                                traceback.format_exc(),
-                                ip.ip,
-                            )
+        ips = [
+            ip
+            for adapter in ifaddr.get_adapters()
+            for ip in adapter.ips
+            if ip.is_IPv4 and not ipaddress.ip_address(ip.ip).is_loopback
+        ]
+        for ip in ips:
+            _LOGGER.debug("Found IPv4 %s", ip.ip)
+            try:
+                endpoint = SensemeDiscoveryEndpoint(ip.ip)
+                await loop.create_datagram_endpoint(
+                    lambda ep=endpoint: SensemeDiscoveryProtocol(ep),
+                    local_addr=(ip.ip, PORT),
+                    family=socket.AF_INET,
+                    allow_broadcast=True,
+                )
+                endpoints.append(endpoint)
+                listening += 1
+            except OSError as e:
+                # borrowed this error handling from python-zeroconf
+                _errno = e.args[0]
+                err_einval = {errno.EINVAL}
+                if sys.platform == "win32":
+                    err_einval |= {errno.WSAEINVAL}
+                if _errno == errno.EADDRINUSE:
+                    _LOGGER.debug(
+                        "Unable to listen on %s. " "Address already in use",
+                        ip.ip,
+                    )
+                elif _errno == errno.EADDRNOTAVAIL:
+                    _LOGGER.debug(
+                        "Unable to listen on %s. " "Address not available",
+                        ip.ip,
+                    )
+                elif _errno in err_einval:
+                    _LOGGER.debug(
+                        "Unable to listen on %s. " "Multicast not supported",
+                        ip.ip,
+                    )
+                else:
+                    _LOGGER.error(
+                        "Unable to listen on %s.\n%s",
+                        traceback.format_exc(),
+                        ip.ip,
+                    )
 
         if listening == 0:
             # failed to bind to any address
@@ -350,7 +348,9 @@ class SensemeDiscovery:
                 start = time.time()
                 while True:
                     try:
-                        device = await asyncio.wait_for(endpoints[0].receive(), 1)
+                        device: SensemeDevice = await asyncio.wait_for(
+                            endpoints[0].receive(), 1
+                        )
                     except asyncio.TimeoutError:
                         device = None
                         if time.time() - start < 5:
@@ -361,30 +361,26 @@ class SensemeDiscovery:
                                 endpoint.abort()
                             endpoints = []
                             break
-                    if device is not None:
-                        if device not in self._devices:
-                            if self.start_first:
-                                if await device.async_update():
-                                    if device not in self._devices:
-                                        self._devices.append(device)
-                                        _LOGGER.debug("Discovered %s", device)
-                                else:
-                                    _LOGGER.debug("Failed to start %s", device.name)
+                    if device is None:
+                        continue
+                    if device in self._devices:
+                        # Check for ip change
+                        self._add_or_update_device(device)
+                    else:
+                        if self.start_first:
+                            if await device.async_update():
+                                self._add_or_update_device(device)
                             else:
-                                if await device.async_fill_out_info():
-                                    if device not in self._devices:
-                                        self._devices.append(device)
-                                        _LOGGER.debug("Discovered %s", device)
-                                else:
-                                    _LOGGER.debug(
-                                        "Failed to retrieve secondary info for %s",
-                                        device.name,
-                                    )
-                        for callback in self._callbacks:
-                            if inspect.iscoroutinefunction(callback):
-                                asyncio.create_task(callback(self._devices.copy()))
+                                _LOGGER.debug("Failed to start %s", device.name)
+                        else:
+                            if await device.async_fill_out_info():
+                                self._add_or_update_device(device)
                             else:
-                                callback(self._devices.copy())
+                                _LOGGER.debug(
+                                    "Failed to retrieve secondary info for %s",
+                                    device.name,
+                                )
+                    self._async_process_callbacks()
                 await asyncio.sleep(1)
                 wait = self.refresh_minutes * 60 + random.uniform(-10, 10)
                 _LOGGER.debug("Currently %s known senseme devices", len(self._devices))
