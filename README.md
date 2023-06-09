@@ -1,3 +1,7 @@
+# Big Ass Fans new protocol 
+
+This library is no longer maintained as Big Ass Fans has changed the protocol in newer firmware. The new protocol has a library here: https://github.com/jfroy/aiobafi6
+
 # aiosenseme library
 
 [![PyPI version](https://badge.fury.io/py/aiosenseme.svg)](https://badge.fury.io/py/aiosenseme) [![Downloads](https://pepy.tech/badge/aiosenseme)](https://pepy.tech/project/aiosenseme)
